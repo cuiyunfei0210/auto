@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
@@ -11,7 +12,11 @@ datas = [(str(web), "wallpaper_studio/web")]
 if readme.exists():
     datas.append((str(readme), "."))
 
-datas += collect_data_files("playwright")
+datas += [
+    (src, dest)
+    for src, dest in collect_data_files("playwright")
+    if ".local-browsers" not in Path(src).as_posix()
+]
 binaries = collect_dynamic_libs("playwright")
 
 try:
@@ -19,13 +24,16 @@ try:
 except ImportError as exc:  # pragma: no cover - build-time check
     raise SystemExit("Playwright is not installed in the build environment.") from exc
 
-local_browsers = Path(playwright.__file__).resolve().parent / "driver" / "package" / ".local-browsers"
-if not local_browsers.exists() or not any(local_browsers.iterdir()):
-    raise SystemExit(
-        "Playwright browsers are missing. Set PLAYWRIGHT_BROWSERS_PATH=0 and run: "
-        "python -m playwright install chromium"
-    )
-datas.append((str(local_browsers), "playwright/driver/package/.local-browsers"))
+# macOS PyInstaller codesign fails on Google Chrome for Testing.app.
+# Windows/Linux keep the bundled Chromium; macOS uses the system Chrome at runtime.
+if sys.platform != "darwin":
+    local_browsers = Path(playwright.__file__).resolve().parent / "driver" / "package" / ".local-browsers"
+    if not local_browsers.exists() or not any(local_browsers.iterdir()):
+        raise SystemExit(
+            "Playwright browsers are missing. Set PLAYWRIGHT_BROWSERS_PATH=0 and run: "
+            "python -m playwright install chromium"
+        )
+    datas.append((str(local_browsers), "playwright/driver/package/.local-browsers"))
 
 a = Analysis(
     [str(root / "run.py")],

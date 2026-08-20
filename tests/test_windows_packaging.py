@@ -14,6 +14,9 @@ def test_windows_packaging_files_exist():
     assert "playwright install chromium" in workflow
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
     assert ".local-browsers" in spec
+    assert 'sys.platform != "darwin"' in spec
+    workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
+    assert "if: runner.os != 'macOS'" in workflow
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
     assert "WallpaperStudio.exe" in text
     assert "PLAYWRIGHT_BROWSERS_PATH" in text
