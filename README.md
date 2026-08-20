@@ -34,6 +34,19 @@
 
 配置和图片在 exe 旁边的 `data` 文件夹里。
 
+## GitHub 自动打包（和 Actions 里的 Build client app 一样）
+
+代码一推送到 GitHub，就会自动跑工作流 **Build client app**：
+
+1. 打开仓库 → 点 **Actions**
+2. 左侧点 **Build client app**
+3. 点进带绿色勾的那一次
+4. 拉到页面底部 **Artifacts**，下载 `client-Windows`
+5. 解压后打开 `WallpaperStudio\WallpaperStudio.exe`
+
+也可以在 Actions 页面右上角 **Run workflow** 手动再打一次包。
+Windows / Linux / macOS 都会各打一份。
+
 ## 能做什么
 
 - 跳过二创，直接选本地文件夹上传

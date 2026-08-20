@@ -1,0 +1,54 @@
+name: Build client app
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run tests
+        run: python -m pytest -q
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyInstaller and app
+        run: python -m pip install --upgrade pip pyinstaller && python -m pip install -e .
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm wallpaper_studio.spec
+      - name: Stage delivery folder
+        shell: bash
+        run: |
+          mkdir -p delivery
+          cp packaging/exe-readme.txt delivery/使用说明.txt || cp packaging/exe-readme.txt delivery/
+          if [ -d dist/WallpaperStudio ]; then
+            cp -R dist/WallpaperStudio delivery/WallpaperStudio
+          elif [ -f dist/WallpaperStudio.exe ]; then
+            cp dist/WallpaperStudio.exe delivery/
+          else
+            cp dist/WallpaperStudio delivery/
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-${{ runner.os }}
+          path: delivery/

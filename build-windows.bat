@@ -40,14 +40,7 @@ if not exist "%VENV%\.chromium-ok" (
 )
 
 echo [3/4] 开始打包，可能要几分钟，窗口不要关...
-"%PYEXE%" -m PyInstaller --noconfirm --clean --name WallpaperStudio ^
-  --add-data "src/wallpaper_studio/web;wallpaper_studio/web" ^
-  --add-data "packaging/exe-readme.txt;." ^
-  --hidden-import uvicorn.logging ^
-  --hidden-import uvicorn.lifespan.on ^
-  --hidden-import uvicorn.protocols.http.auto ^
-  --hidden-import uvicorn.protocols.websockets.auto ^
-  run.py
+"%PYEXE%" -m PyInstaller --noconfirm --clean wallpaper_studio.spec
 if errorlevel 1 goto :fail
 
 echo [4/4] 写入使用说明...
