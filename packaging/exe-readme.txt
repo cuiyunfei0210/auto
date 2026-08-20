@@ -1,3 +1,5 @@
+本脚本由 web_chicken@163.com 开发
+
 把整个 WallpaperStudio 文件夹拷到电脑上任意位置。
 
 打开方法

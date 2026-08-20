@@ -10,6 +10,7 @@ def test_home_and_config_roundtrip(studio_home):
     home = client.get("/")
     assert home.status_code == 200
     assert "壁纸工坊" in home.text
+    assert "本脚本由 web_chicken@163.com 开发" in home.text
 
     state = client.get("/api/state")
     assert state.status_code == 200
