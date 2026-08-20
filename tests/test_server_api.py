@@ -73,8 +73,8 @@ def test_default_state_includes_cqwall_and_xbhuiz(studio_home):
     client = TestClient(create_app())
     state = client.get("/api/state").json()["config"]
     assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
-    assert "xbhuiz.com" in state["api"]["base_url"]
-    assert state["api"]["username"] == "596003517@qq.com"
+    assert "xmapi.site" in state["api"]["base_url"]
+    assert state["api"]["api_key"].startswith("sk-")
 
 
 def test_state_includes_archive_warning_field(studio_home):

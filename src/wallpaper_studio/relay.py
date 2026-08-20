@@ -27,9 +27,13 @@ def friendly_error_message(raw: str) -> str:
     if "image_generation" in lowered and "tools" in lowered:
         return (
             "中转站的 /v1/images 生图通道仍在报 Tool choice 'image_generation' not found in 'tools' parameter。"
-            "程序已改走 /v1/responses 对话画图（带 tools），若仍然失败，请把「二创对话模型」改成这个中转站实际有的模型"
-            "（当前 xbhuiz 生图 Key 常见只有 gpt-image-2），并确认账号下有可用 Key。"
-            "实在不行再暂时改用「跳过二创」。"
+            "程序已改走干净的 /v1/images/edits（生图模型用 gpt-image-2），对话模型请填这个 Key 组实际有的模型。"
+            "当前这组 Key 常见只有 gpt-image-2，不能用来写标题。实在不行再暂时改用「跳过二创」。"
+        )
+    if "xmapi.site" in lowered and ("生图" in text or "images" in lowered or "线路" in text):
+        return (
+            "当前接口走的是 xbhuiz 线路，不能生图。请把接口地址改成 https://xmapi.site （不要带 /v1），"
+            "API Key 用中转站后台给的 sk-，生图模型填 gpt-image-2。"
         )
     if "batch_image_disabled" in lowered or "batch image" in lowered:
         return (
@@ -42,7 +46,7 @@ def normalize_api_base(url: str) -> str:
     text = (url or "").strip().rstrip("/")
     if text.lower().endswith("/v1"):
         text = text[:-3].rstrip("/")
-    return text or "https://xbhuiz.com"
+    return text or "https://xmapi.site"
 
 
 def resolve_api_key(settings: ApiSettings, transport: httpx.BaseTransport | None = None) -> str:
@@ -215,7 +219,19 @@ class RelayClient:
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
         size = official_image_size(self.settings.image_size)
-        raw_size = self.settings.image_size.strip() or size
+        edits = (
+            "/v1/images/edits",
+            {
+                "model": image_model,
+                "prompt": prompt,
+                "images": [{"image_url": data_url}],
+                "size": size,
+            },
+        )
+        if not chat_model_supports_titles(chat_model):
+            # gpt-image-2 is not a chat model. xmapi.site accepts a clean edits payload;
+            # responses/chat on this key return 503 / "not supported".
+            return [edits]
         tool = {
             "type": "image_generation",
             "action": "edit",
@@ -261,18 +277,7 @@ class RelayClient:
                     "modalities": ["text", "image"],
                 },
             ),
-            (
-                "/v1/images/edits",
-                {
-                    "model": image_model,
-                    "prompt": prompt,
-                    "image_size": raw_size,
-                    "size": raw_size,
-                    "images": [{"image_url": data_url, "mime_type": mime}],
-                    "tools": [tool],
-                    "tool_choice": "auto",
-                },
-            ),
+            edits,
         ]
 
 

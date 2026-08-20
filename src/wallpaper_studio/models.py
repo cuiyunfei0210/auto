@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class ApiSettings(BaseModel):
-    base_url: str = "https://xbhuiz.com"
-    api_key: str = ""
+    base_url: str = "https://xmapi.site"
+    api_key: str = "sk-8a77cad546b762802c03bf0afaa41b5a68d3962d2ec939188bf64a6f1d5337df"
     username: str = "596003517@qq.com"
     password: str = "123123"
     remix_model: str = "gpt-image-2"
@@ -102,12 +102,25 @@ def default_accounts() -> list[Account]:
     ]
 
 
-OLD_RELAY_URLS = {"https://api.newxxt.top"}
+OLD_RELAY_URLS = {
+    "https://api.newxxt.top",
+    "https://xbhuiz.com",
+    "https://www.xbhuiz.com",
+}
 RELAY_EMAILS_IN_CQWALL_SLOT = {"1252597792@qq.com", "596003517@qq.com"}
+DEFAULT_API_BASE = "https://xmapi.site"
+DEFAULT_API_KEY = "sk-8a77cad546b762802c03bf0afaa41b5a68d3962d2ec939188bf64a6f1d5337df"
+
+
+def _relay_root(url: str) -> str:
+    text = (url or "").strip().rstrip("/").lower()
+    if text.endswith("/v1"):
+        text = text[:-3].rstrip("/")
+    return text
 
 
 def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
-    """Fill empty/legacy fields with the built-in CQwall + xbhuiz defaults."""
+    """Fill empty/legacy fields with the built-in CQwall + xmapi defaults."""
     payload = config.model_dump()
     changed = False
     wanted = "ari-ihcot@linshi-mail.com"
@@ -124,10 +137,14 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
         payload["accounts"] = [item.model_dump() for item in default_accounts()] + accounts
         changed = True
     api = payload.setdefault("api", {})
-    current_url = str(api.get("base_url") or "").strip().rstrip("/")
-    if not current_url or current_url in OLD_RELAY_URLS:
-        api["base_url"] = "https://xbhuiz.com"
-        api["api_key"] = ""
+    current_url = _relay_root(str(api.get("base_url") or ""))
+    if not current_url or current_url in {_relay_root(item) for item in OLD_RELAY_URLS}:
+        api["base_url"] = DEFAULT_API_BASE
+        if not str(api.get("api_key") or "").strip():
+            api["api_key"] = DEFAULT_API_KEY
+        changed = True
+    elif current_url == _relay_root(DEFAULT_API_BASE) and not str(api.get("api_key") or "").strip():
+        api["api_key"] = DEFAULT_API_KEY
         changed = True
     if not str(api.get("username") or "").strip():
         api["username"] = "596003517@qq.com"

@@ -53,7 +53,7 @@ Windows / Linux / macOS 都会各打一份。
 ## 能做什么
 
 - 跳过二创，直接选本地文件夹上传
-- 对接中转站 API（默认 `https://xbhuiz.com`，可用邮箱密码自动取 Key）做图生图，并按提示词生成标题
+- 对接中转站 API（默认 `https://xmapi.site`，生图模型 `gpt-image-2`）做图生图
 - 多账号队列：每个账号可设上传数量、间隔和独立代理
 - 用 Chromium 打开登录页、填表、选文件、点发布（不调壁纸站后台接口）
 - 代理可选。默认 **一个账号一个出口 IP**，代理不够或两个账号填了同一个代理时会拒绝开跑；关掉代理也能正常上传
@@ -81,15 +81,15 @@ python run.py
 
 对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)，账号页预填 `ari-ihcot@linshi-mail.com`。分类默认风景（值为 9）。程序不限制图片宽高。
 
-中转站默认 [xbhuiz.com](https://xbhuiz.com/)，用「二创 API」里的邮箱密码自动取 Key。账号队列里不要填中转站邮箱。
+中转站默认 [xmapi.site](https://xmapi.site/)，不要填 `xbhuiz.com`（那条线路不能生图）。接口地址不要带 `/v1`。账号队列里不要填中转站邮箱。
 
 ## 二创
 
-在「二创 API」可改中转站地址、邮箱密码或 API Key。当前默认是 `https://xbhuiz.com`。该站的生图 Key 目前模型列表里常见只有 `gpt-image-2`，所以对话模型和文件名模型也默认用它。
+在「二创 API」可改中转站地址或 API Key。当前默认是 `https://xmapi.site`，生图模型 `gpt-image-2`。后台 OpenCode 配置里的 `gpt-5.x` 是对话模型，这组生图 Key 通常只有 `gpt-image-2`，不能用来写标题。
 
-部分中转站的 `/v1/images/edits` 会返回 `Tool choice 'image_generation' not found in 'tools' parameter`。程序会改走 `/v1/responses` 对话画图。请把对话模型改成该站实际有的模型；xbhuiz 当前生图 Key 常见只有 `gpt-image-2`。
+`gpt-image-2` 走干净的 `/v1/images/edits`（`images[].image_url`），不再先打 `/v1/responses` / `/v1/chat/completions`。
 
-文件名提示词会走 `/v1/chat/completions`，用生成的标题作为上传标题。
+文件名提示词会走 `/v1/chat/completions`；生图模型不能写标题时会沿用原文件名。
 
 ## 出口 IP
 

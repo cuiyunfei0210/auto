@@ -109,7 +109,14 @@ def test_apply_defaults_adds_cqwall_and_switches_old_relay():
         }
     )
     updated = apply_builtin_defaults(config)
-    assert updated.api.base_url == "https://xbhuiz.com"
-    assert updated.api.api_key == ""
+    assert updated.api.base_url == "https://xmapi.site"
+    assert updated.api.api_key.startswith("sk-")
     assert updated.accounts[0].username == "ari-ihcot@linshi-mail.com"
     assert all(item.username != "1252597792@qq.com" for item in updated.accounts)
+
+
+def test_apply_defaults_switches_xbhuiz_to_xmapi():
+    config = AppConfig.model_validate({"api": {"base_url": "https://xbhuiz.com", "api_key": ""}})
+    updated = apply_builtin_defaults(config)
+    assert updated.api.base_url == "https://xmapi.site"
+    assert updated.api.api_key.startswith("sk-")

@@ -162,17 +162,17 @@
       <section class="pane hidden" id="pane-api">
         <article class="card">
           <h2>中转站 API</h2>
-          <label>接口地址<input id="base_url"></label>
+          <label>接口地址<input id="base_url" placeholder="https://xmapi.site"></label>
           <label>中转站邮箱<input id="api_username"></label>
           <label>中转站密码<input id="api_password" type="password"></label>
           <label>API Key（可留空，程序会用邮箱密码自动取）<input id="api_key" type="password" placeholder="sk-…"></label>
-          <label>二创对话模型（填中转站实际有的模型，xbhuiz 生图 Key 常见 gpt-image-2）<input id="remix_chat_model"></label>
-          <label>生图模型（例如 gpt-image-2）<input id="remix_model"></label>
+          <label>二创对话模型（仅当 Key 组有对话模型时填写）<input id="remix_chat_model"></label>
+          <label>生图模型（当前 Key 组用 gpt-image-2）<input id="remix_model"></label>
           <label>文件名模型<input id="filename_model"></label>
           <label>二创提示词<textarea id="remix_prompt" rows="3"></textarea></label>
           <label>文件名提示词（生成上传标题）<textarea id="filename_prompt" rows="3"></textarea></label>
           <label>出图尺寸<input id="image_size"></label>
-          <p class="hint">中转站默认 xbhuiz.com。邮箱密码用来自动取出 API Key；Key 也可以手动填。账号队列里填的是 CQwall，不是中转站。</p>
+          <p class="hint">生图请填 https://xmapi.site（不要带 /v1）。xbhuiz.com 这条线路不能生图。后台 OpenCode 里的 gpt-5.x 是对话模型，这组生图 Key 通常只有 gpt-image-2。账号队列里填的是 CQwall，不是中转站。</p>
         </article>
       </section>
     </main>
