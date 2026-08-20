@@ -5,18 +5,27 @@ from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 
 DEFAULT_REMIX_PROMPT = (
-    "把这张参考图做成一张全新的高质量桌面壁纸。"
-    "保留主体和构图，但必须明显改变光线、色调、材质、细节和氛围，"
-    "禁止原样复制或输出几乎不变的图。"
-    "电影级光影，锐利细节，没有水印和文字。 "
-    "Create a brand-new high-quality desktop wallpaper from this reference image. "
-    "Keep the same subject and composition, but you MUST clearly change lighting, "
-    "color grade, textures, details, and atmosphere. Do not copy the original pixels "
-    "or return a near-identical image. Cinematic lighting, sharp details, no watermarks or text."
+    "根据参考图做一张全新的高质量桌面壁纸。保留主体，但必须按提示改光线、色调和氛围，禁止原样复制。"
+    "锐利细节，没有水印和文字。"
+    "不要默认做成黄昏、日落或金橙色晚霞，除非提示词明确要求。"
+    " Create a brand-new desktop wallpaper from this reference. Keep the subject, "
+    "but change lighting and mood as instructed. Do not copy the original pixels "
+    "or return a near-identical image. Sharp details, no watermarks. "
+    "Do not default to sunset, dusk, or golden hour unless the prompt asks for it."
 )
 _WEAK_REMIX_PROMPTS = {
     "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details.",
     "Restyle this image as a desktop wallpaper.",
+    (
+        "把这张参考图做成一张全新的高质量桌面壁纸。"
+        "保留主体和构图，但必须明显改变光线、色调、材质、细节和氛围，"
+        "禁止原样复制或输出几乎不变的图。"
+        "电影级光影，锐利细节，没有水印和文字。 "
+        "Create a brand-new high-quality desktop wallpaper from this reference image. "
+        "Keep the same subject and composition, but you MUST clearly change lighting, "
+        "color grade, textures, details, and atmosphere. Do not copy the original pixels "
+        "or return a near-identical image. Cinematic lighting, sharp details, no watermarks or text."
+    ),
 }
 
 
@@ -38,7 +47,7 @@ class ApiSettings(BaseModel):
     filename_model: str = "gpt-image-2"
     remix_prompt: str = DEFAULT_REMIX_PROMPT
     filename_prompt: str = "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes."
-    image_size: str = "1K"
+    image_size: str = "1920x1080"
 
     @field_validator("remix_prompt", mode="before")
     @classmethod

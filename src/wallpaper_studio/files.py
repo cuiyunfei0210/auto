@@ -118,6 +118,34 @@ def unique_path(directory: Path, stem: str, suffix: str) -> Path:
     return candidate
 
 
+def fit_image_bytes(image_bytes: bytes, size: tuple[int, int], suffix: str = ".png") -> bytes:
+    """Cover-crop and resize to an exact width/height. Used after gpt-image-2's native sizes."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    target_w, target_h = size
+    if target_w <= 0 or target_h <= 0:
+        return image_bytes
+    with Image.open(BytesIO(image_bytes)) as image:
+        image = image.convert("RGB")
+        if image.size == (target_w, target_h):
+            return image_bytes
+        src_w, src_h = image.size
+        scale = max(target_w / src_w, target_h / src_h)
+        resized = image.resize(
+            (max(target_w, int(src_w * scale + 0.5)), max(target_h, int(src_h * scale + 0.5))),
+            Image.Resampling.LANCZOS,
+        )
+        left = max(0, (resized.width - target_w) // 2)
+        top = max(0, (resized.height - target_h) // 2)
+        cropped = resized.crop((left, top, left + target_w, top + target_h))
+        buffer = BytesIO()
+        fmt = "JPEG" if suffix.lower() in {".jpg", ".jpeg"} else "PNG"
+        cropped.save(buffer, format=fmt)
+        return buffer.getvalue()
+
+
 def image_dimensions(path: Path) -> tuple[int, int]:
     from PIL import Image
 

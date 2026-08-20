@@ -89,4 +89,4 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
     assert ticks[0] == (2, 2)
     assert ticks[1] == (1, 2)
     assert ticks[2] == (0, 2)
-    assert any("不会原样照搬" in line for line in logs)
+    assert any("不会强制黄昏" in line for line in logs)

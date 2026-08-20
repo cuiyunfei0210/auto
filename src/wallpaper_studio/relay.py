@@ -8,7 +8,7 @@ from pathlib import Path
 
 import httpx
 
-from wallpaper_studio.files import sanitize_filename, unique_path
+from wallpaper_studio.files import sanitize_filename, unique_path, fit_image_bytes
 from wallpaper_studio.models import ApiSettings, effective_remix_prompt
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
@@ -137,18 +137,143 @@ def is_transient_relay_error(text: str) -> bool:
 
 
 def official_image_size(value: str) -> str:
-    text = (value or "").strip() or "1024x1024"
+    api_size, _upscale = resolve_remix_size(value)
+    return api_size
+
+
+def resolve_remix_size(value: str) -> tuple[str, tuple[int, int] | None]:
+    """Map UI size text to gpt-image-2's native size plus an optional upscale target.
+
+    gpt-image-2 only generates 1024x1024, 1536x1024, or 1024x1536. Values like 2K/4K
+    used to be silently sent as 1536x1024. We still generate at that native size, then
+    enlarge to a real wallpaper resolution when the user asked for one.
+    """
+    text = (value or "").strip() or "1920x1080"
     key = text.lower().replace(" ", "").replace("×", "x")
-    mapping = {
-        "1k": "1024x1024",
-        "2k": "1536x1024",
-        "4k": "1536x1024",
-        "auto": "auto",
-        "square": "1024x1024",
-        "portrait": "1024x1536",
-        "landscape": "1536x1024",
+    mapping: dict[str, tuple[str, tuple[int, int] | None]] = {
+        "1k": ("1024x1024", None),
+        "1024x1024": ("1024x1024", None),
+        "square": ("1024x1024", None),
+        "auto": ("auto", None),
+        "1536x1024": ("1536x1024", None),
+        "landscape": ("1536x1024", None),
+        "2k": ("1536x1024", (2560, 1440)),
+        "qhd": ("1536x1024", (2560, 1440)),
+        "2560x1440": ("1536x1024", (2560, 1440)),
+        "1080p": ("1536x1024", (1920, 1080)),
+        "fhd": ("1536x1024", (1920, 1080)),
+        "1920x1080": ("1536x1024", (1920, 1080)),
+        "4k": ("1536x1024", (3840, 2160)),
+        "uhd": ("1536x1024", (3840, 2160)),
+        "3840x2160": ("1536x1024", (3840, 2160)),
+        "portrait": ("1024x1536", None),
+        "1024x1536": ("1024x1536", None),
+        "1080x1920": ("1024x1536", (1080, 1920)),
+        "9:16": ("1024x1536", (1080, 1920)),
+        "16:9": ("1536x1024", (1920, 1080)),
     }
-    return mapping.get(key, text.replace("×", "x"))
+    if key in mapping:
+        return mapping[key]
+    parsed = _parse_width_height(key)
+    if parsed:
+        width, height = parsed
+        api_size = _nearest_official_size(width, height)
+        if (width, height) == tuple(int(part) for part in api_size.split("x")):
+            return api_size, None
+        if width * height > 1024 * 1024:
+            return api_size, (width, height)
+        return api_size, None
+    return mapping.get(key, ("1536x1024", (1920, 1080)))
+
+
+def _parse_width_height(text: str) -> tuple[int, int] | None:
+    if "x" not in text:
+        return None
+    left, right = text.split("x", 1)
+    if not left.isdigit() or not right.isdigit():
+        return None
+    width, height = int(left), int(right)
+    if width < 256 or height < 256:
+        return None
+    return width, height
+
+
+def _nearest_official_size(width: int, height: int) -> str:
+    if abs(width - height) < min(width, height) * 0.08:
+        return "1024x1024"
+    if height > width:
+        return "1024x1536"
+    return "1536x1024"
+
+
+_SUNSET_HINTS = (
+    "黄昏",
+    "日落",
+    "夕阳",
+    "晚霞",
+    "金色小时",
+    "sunset",
+    "dusk",
+    "twilight",
+    "golden hour",
+    "golden-hour",
+)
+
+
+def prompt_asks_for_sunset(text: str) -> bool:
+    raw = text or ""
+    lowered = raw.lower()
+    for token in _SUNSET_HINTS:
+        haystack = lowered if token.isascii() else raw
+        needle = token.lower() if token.isascii() else token
+        start = 0
+        while True:
+            pos = haystack.find(needle, start)
+            if pos < 0:
+                break
+            prefix = haystack[max(0, pos - 8) : pos]
+            if any(
+                marker in prefix
+                for marker in ("不要", "别", "禁止", "避免", "not ", "no ", "don't", "do not", "dont")
+            ):
+                start = pos + len(needle)
+                continue
+            return True
+    return False
+
+
+def build_remix_prompt(user_prompt: str) -> str:
+    instruction = effective_remix_prompt(user_prompt)
+    extra = ""
+    if not prompt_asks_for_sunset(instruction):
+        extra = (
+            "Do not default to sunset, dusk, golden hour, or orange evening light "
+            "unless the instruction above explicitly asks for it. "
+            "Follow the requested time of day and color mood; if none is specified, "
+            "use natural daylight that is clearly different from the reference photo.\n"
+        )
+    return (
+        f"Primary instruction:\n{instruction}\n\n"
+        "Generate a newly edited wallpaper from the reference photo. "
+        "The instruction above has priority over the reference photo's lighting and color. "
+        "Do not reply with text only, and do not return the original image unchanged.\n"
+        + extra
+    )
+
+
+_NATIVE_GPT_IMAGE_SIZES = {(1024, 1024), (1536, 1024), (1024, 1536)}
+
+
+def _upscale_native_wallpaper(image_bytes: bytes, target: tuple[int, int], suffix: str) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    with Image.open(BytesIO(image_bytes)) as image:
+        current = image.size
+    if current not in _NATIVE_GPT_IMAGE_SIZES or current == target:
+        return image_bytes
+    return fit_image_bytes(image_bytes, target, suffix)
 
 
 class RelayClient:
@@ -256,20 +381,19 @@ class RelayClient:
                 continue
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = unique_path(dest_dir, title, suffix)
+            _api_size, upscale = resolve_remix_size(self.settings.image_size)
+            if upscale:
+                image_bytes = _upscale_native_wallpaper(image_bytes, upscale, suffix)
             dest.write_bytes(image_bytes)
             return dest
         combined = " | ".join(errors) if errors else "未知错误"
         raise ApiError(friendly_error_message(combined))
 
     def _remix_requests(self, data_url: str, mime: str) -> list[tuple[str, dict]]:
-        prompt = (
-            "You must generate a newly edited wallpaper from the reference photo. "
-            "Do not reply with text only, and do not return the original image unchanged.\n"
-            + effective_remix_prompt(self.settings.remix_prompt)
-        )
+        prompt = build_remix_prompt(self.settings.remix_prompt)
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
-        size = official_image_size(self.settings.image_size)
+        size, _upscale = resolve_remix_size(self.settings.image_size)
         edits = (
             "/v1/images/edits",
             {

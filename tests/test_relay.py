@@ -7,10 +7,12 @@ import httpx
 from wallpaper_studio.models import DEFAULT_REMIX_PROMPT, ApiSettings
 from wallpaper_studio.relay import (
     RelayClient,
+    build_remix_prompt,
     chat_model_supports_titles,
     extract_image_payload,
     friendly_error_message,
     official_image_size,
+    resolve_remix_size,
 )
 from tests.helpers import make_png
 
@@ -57,6 +59,16 @@ def test_friendly_message_keeps_unknown_text():
 def test_official_image_size_maps_1k():
     assert official_image_size("1K") == "1024x1024"
     assert official_image_size("1024x1024") == "1024x1024"
+    assert official_image_size("2K") == "1536x1024"
+    assert official_image_size("4K") == "1536x1024"
+
+
+def test_resolve_remix_size_upscales_2k_and_4k():
+    assert resolve_remix_size("2K") == ("1536x1024", (2560, 1440))
+    assert resolve_remix_size("4K") == ("1536x1024", (3840, 2160))
+    assert resolve_remix_size("1920x1080") == ("1536x1024", (1920, 1080))
+    assert resolve_remix_size("1536x1024") == ("1536x1024", None)
+    assert resolve_remix_size("1K") == ("1024x1024", None)
 
 
 def test_extract_image_from_responses_payload():
@@ -216,6 +228,53 @@ def test_empty_remix_prompt_sends_strong_restyle_instruction():
     client = RelayClient(settings)
     path, payload = client._remix_requests("data:image/png;base64,xx", "image/png")[0]
     assert path == "/v1/images/edits"
+    assert payload["prompt"].startswith("Primary instruction:")
     assert "禁止原样" in payload["prompt"]
     assert "near-identical" in payload["prompt"]
+    assert "Do not default to sunset" in payload["prompt"]
     assert "Restyle this image as a desktop wallpaper." not in payload["prompt"]
+    assert "Cinematic lighting" not in payload["prompt"]
+
+
+def test_custom_remix_prompt_is_primary_and_does_not_force_sunset():
+    prompt = build_remix_prompt("把山改成雪景，正午冷色调，不要黄昏。")
+    assert "把山改成雪景" in prompt
+    assert prompt.startswith("Primary instruction:")
+    assert "Do not default to sunset" in prompt
+
+
+def test_sunset_prompt_skips_anti_dusk_guard():
+    prompt = build_remix_prompt("Keep the dolphin, make a dramatic sunset over the ocean.")
+    assert "dramatic sunset" in prompt
+    assert "Do not default to sunset" not in prompt
+
+
+def test_do_not_sunset_still_gets_anti_dusk_guard():
+    from wallpaper_studio.relay import prompt_asks_for_sunset
+
+    assert prompt_asks_for_sunset("dramatic sunset over the ocean")
+    assert not prompt_asks_for_sunset("正午冷色调，不要黄昏")
+    assert not prompt_asks_for_sunset("no sunset, use noon light")
+
+
+def test_remix_upscales_native_2k_canvas(tmp_path: Path):
+    from PIL import Image
+
+    source = make_png(tmp_path / "night.png")
+    native = tmp_path / "native.png"
+    Image.new("RGB", (1536, 1024), (20, 40, 80)).save(native)
+    image_b64 = base64.b64encode(native.read_bytes()).decode("ascii")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["size"] == "1536x1024"
+        return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="2K"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    with Image.open(dest) as image:
+        assert image.size == (2560, 1440)

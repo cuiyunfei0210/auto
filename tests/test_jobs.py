@@ -165,15 +165,18 @@ def test_blank_remix_prompt_becomes_restyle_default():
     assert effective_remix_prompt(custom) == custom
 
 
-def test_apply_defaults_upgrades_weak_remix_prompt():
-    config = AppConfig.model_validate(
-        {
-            "api": {
-                "remix_prompt": "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details."
-            }
-        }
+def test_apply_defaults_upgrades_cinematic_remix_prompt():
+    cinematic = (
+        "把这张参考图做成一张全新的高质量桌面壁纸。"
+        "保留主体和构图，但必须明显改变光线、色调、材质、细节和氛围，"
+        "禁止原样复制或输出几乎不变的图。"
+        "电影级光影，锐利细节，没有水印和文字。 "
+        "Create a brand-new high-quality desktop wallpaper from this reference image. "
+        "Keep the same subject and composition, but you MUST clearly change lighting, "
+        "color grade, textures, details, and atmosphere. Do not copy the original pixels "
+        "or return a near-identical image. Cinematic lighting, sharp details, no watermarks or text."
     )
-    # assignment can bypass the validator after construction
-    config.api.remix_prompt = "Restyle this image as a desktop wallpaper."
-    updated = apply_builtin_defaults(config)
-    assert updated.api.remix_prompt == DEFAULT_REMIX_PROMPT
+    config = AppConfig.model_validate({"api": {"remix_prompt": cinematic}})
+    assert config.api.remix_prompt == DEFAULT_REMIX_PROMPT
+    assert "电影级光影" not in config.api.remix_prompt
+

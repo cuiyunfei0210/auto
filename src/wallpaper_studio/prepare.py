@@ -6,7 +6,7 @@ from shutil import copy2
 
 from wallpaper_studio.files import empty_source_message, list_images, sanitize_filename, unique_path
 from wallpaper_studio.models import AppConfig
-from wallpaper_studio.relay import ApiError, RelayClient, chat_model_supports_titles, friendly_error_message
+from wallpaper_studio.relay import ApiError, RelayClient, chat_model_supports_titles, friendly_error_message, resolve_remix_size
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
@@ -51,7 +51,14 @@ def prepare_images(
     if progress:
         progress(remaining, total)
     if config.mode == "remix_then_upload":
-        emit("二创会按提示词重绘样板；提示词留空时自动用默认改图词，不会原样照搬。")
+        emit("二创会按你填的提示词改图，不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
+        api_size, upscale = resolve_remix_size(config.api.image_size)
+        if upscale:
+            emit(
+                f"gpt-image-2 只能原生出 1024/1536，将先生成 {api_size}，再放大到 {upscale[0]}x{upscale[1]}。"
+            )
+        else:
+            emit(f"出图尺寸 {api_size}。填 2K/4K/1920x1080 才会放大；模型本身没有真正的 4K。")
 
     for image in images:
         title = image.stem

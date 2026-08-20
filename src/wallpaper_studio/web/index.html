@@ -172,14 +172,23 @@
           <label>二创对话模型（仅当 Key 组有对话模型时填写）<input id="remix_chat_model"></label>
           <label>生图模型（当前 Key 组用 gpt-image-2）<input id="remix_model"></label>
           <label>文件名模型<input id="filename_model"></label>
-          <label>二创提示词<textarea id="remix_prompt" rows="3" placeholder="留空会用默认改图提示，不会原样照搬样板"></textarea></label>
+          <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="留空会用默认改图提示。想避免黄昏，请写清时段，例如正午、阴天、夜晚、冷色调"></textarea></label>
           <label>文件名提示词（生成上传标题）<textarea id="filename_prompt" rows="3"></textarea></label>
-          <label>出图尺寸<input id="image_size"></label>
-          <p class="hint">二创提示词留空保存后，会自动填入默认改图词，要求明显换光线、色调和氛围，不会把样板原样再存一遍。生图请填 https://xmapi.site（不要带 /v1）。xbhuiz.com 这条线路不能生图。后台 OpenCode 里的 gpt-5.x 是对话模型，这组生图 Key 通常只有 gpt-image-2。账号队列里填的是 CQwall，不是中转站。</p>
+          <label>出图尺寸<input id="image_size" list="image-size-options" placeholder="例如 1920x1080 或 2K"></label>
+          <datalist id="image-size-options">
+            <option value="1024x1024">方图 1024×1024</option>
+            <option value="1536x1024">横图 1536×1024（模型原尺寸）</option>
+            <option value="1920x1080">横图 1920×1080（放大）</option>
+            <option value="2560x1440">横图 2560×1440 / 2K（放大）</option>
+            <option value="3840x2160">横图 3840×2160 / 4K（放大）</option>
+            <option value="1024x1536">竖图 1024×1536</option>
+            <option value="1080x1920">竖图 1080×1920（放大）</option>
+          </datalist>
+          <p class="hint">二创提示词以你填的为准。电影级光影、atmospheric depth 这类词很容易出黄昏；想要别的时段请写「正午 / 阴天 / 夜晚 / 冷色」。gpt-image-2 原生只有 1024×1024、1536×1024、1024×1536。填 2K/4K/1920×1080 时，程序会先按最接近的档位出图，再放大到目标尺寸（不是模型直接出 4K）。留空提示词会用默认改图词。生图请填 https://xmapi.site（不要带 /v1）。</p>
         </article>
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260820t" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260820u" charset="utf-8"></script>
 </body>
 </html>
