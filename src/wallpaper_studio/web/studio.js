@@ -119,7 +119,7 @@ function localStartProblems(cfg) {
   if (!cfg.accounts.length) {
     problems.push("还没有账号。请到「账号」页填写 CQwall 邮箱和密码。");
   }
-  const sourceCount = Number(lastState.source_count ?? $("source-count").textContent || 0);
+  const sourceCount = Number(lastState.source_count != null ? lastState.source_count : ($("source-count").textContent || 0));
   if (!Number.isFinite(sourceCount) || sourceCount <= 0) {
     problems.push(
       lastState.source_note

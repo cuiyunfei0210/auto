@@ -27,5 +27,21 @@ def test_windows_packaging_files_exist():
     assert "refreshCounts" in ui
     assert "parseJson" in ui
     assert "任务已开始" in ui
+    assert "??" not in ui or "source_count ?? $" not in ui
     html = (root / "src" / "wallpaper_studio" / "web" / "index.html").read_text(encoding="utf-8")
     assert "studio.js" in html
+
+
+def test_studio_js_has_valid_syntax():
+    import shutil
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    js = root / "src" / "wallpaper_studio" / "web" / "studio.js"
+    text = js.read_text(encoding="utf-8")
+    for line in text.splitlines():
+        if "??" in line and "||" in line:
+            raise AssertionError(f"do not mix ?? and || on one line: {line.strip()}")
+    node = shutil.which("node")
+    if node:
+        subprocess.run([node, "--check", str(js)], check=True)
