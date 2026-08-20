@@ -14,6 +14,7 @@ def test_home_and_config_roundtrip(studio_home):
     assert js.status_code == 200
     assert "function renderLogs" in js.text
     assert "function notify" in js.text
+    assert "charset=utf-8" in (js.headers.get("content-type") or "").lower()
 
     state = client.get("/api/state")
     assert state.status_code == 200

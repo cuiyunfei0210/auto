@@ -32,7 +32,7 @@ function accountRow(account = { username: "", password: "", upload_count: 3, int
 }
 
 function escapeAttr(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+  return String(value == null ? "" : value).split("&").join("&amp;").split('"').join("&quot;").split("<").join("&lt;");
 }
 
 function collectConfig() {
@@ -77,17 +77,17 @@ function applyConfig(config) {
   document.querySelector(`input[name=mode][value="${config.mode}"]`).checked = true;
   $("source_dir").value = config.paths.source_dir || "";
   $("output_dir").value = config.paths.output_dir || "";
-  for (const key of siteFields) $(key).value = config.site[key] ?? "";
+  for (const key of siteFields) $(key).value = config.site[key] == null ? "" : config.site[key];
   $("headless").checked = Boolean(config.site.headless);
   if ($("site_preset")) {
     $("site_preset").value = (config.site.login_url || "").includes("cqwall.com") ? "cqwall" : "demo";
   }
-  for (const key of apiFields) $(key).value = config.api[key] ?? "";
+  for (const key of apiFields) $(key).value = config.api[key] == null ? "" : config.api[key];
   if ($("api_username")) $("api_username").value = config.api.username || "";
   if ($("api_password")) $("api_password").value = config.api.password || "";
   $("proxy_enabled").checked = Boolean(config.network.proxy_enabled);
   $("unique_ip_per_account").checked = config.network.unique_ip_per_account !== false;
-  $("rotate_every_accounts").value = config.network.rotate_every_accounts ?? 1;
+  $("rotate_every_accounts").value = config.network.rotate_every_accounts == null ? 1 : config.network.rotate_every_accounts;
   $("proxies").value = (config.network.proxies || []).join("\n");
   const body = $("account-rows");
   body.innerHTML = "";
@@ -158,7 +158,7 @@ async function parseJson(res) {
   const text = await res.text();
   try {
     return JSON.parse(text);
-  } catch {
+  } catch (ignore) {
     const snippet = String(text || "").replace(/\s+/g, " ").slice(0, 160);
     throw new Error(`服务器出错（${res.status}）。${snippet || "请看黑色窗口里的报错。"}`);
   }
@@ -169,8 +169,8 @@ let presets = {};
 
 function applySourceStatus(data) {
   lastState = data || {};
-  $("source-count").textContent = data.source_count ?? 0;
-  $("output-count").textContent = data.output_count ?? 0;
+  $("source-count").textContent = data.source_count == null ? 0 : data.source_count;
+  $("output-count").textContent = data.output_count == null ? 0 : data.output_count;
   if ($("path-hint") && data.source_dir) {
     $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
   }
@@ -253,6 +253,13 @@ async function saveConfig({ silent = false } = {}) {
   return data;
 }
 
+function bindClick(id, handler) {
+  const el = $(id);
+  if (!el) return;
+  el.onclick = handler;
+}
+
+try {
 document.querySelectorAll("aside nav button").forEach((button) => {
   button.onclick = () => {
     document.querySelectorAll("aside nav button").forEach((item) => item.classList.remove("active"));
@@ -266,13 +273,13 @@ document.querySelectorAll("aside nav button").forEach((button) => {
   };
 });
 
-$("btn-add-account").onclick = () => $("account-rows").appendChild(accountRow());
-$("btn-save").onclick = async () => {
+bindClick("btn-add-account", () => $("account-rows").appendChild(accountRow()));
+bindClick("btn-save", async () => {
   const data = await saveConfig();
   if (data && data.ok === false) return;
   notify("设置已保存。");
-};
-$("btn-start").onclick = async () => {
+});
+bindClick("btn-start", async () => {
   const running = $("status-pill").classList.contains("live");
   if (running) {
     notify("任务正在运行。请先点「停止」，或等当前任务结束后再开始。");
@@ -311,23 +318,28 @@ $("btn-start").onclick = async () => {
   } finally {
     $("btn-start").dataset.busy = "0";
   }
-};
-$("btn-stop").onclick = async () => {
+});
+bindClick("btn-stop", async () => {
   try {
     await fetch("/api/stop", { method: "POST" });
     notify("已发送停止请求。请看右侧运行日志。");
   } catch (err) {
     notify(`停止失败：${err && err.message ? err.message : err}`);
   }
-};
+});
 
 if ($("site_preset")) {
   $("site_preset").onchange = () => {
     const preset = presets[$("site_preset").value];
     if (!preset) return;
-    for (const key of siteFields) $(key).value = preset[key] ?? "";
+    for (const key of siteFields) $(key).value = preset[key] == null ? "" : preset[key];
     $("headless").checked = Boolean(preset.headless);
   };
+}
+} catch (err) {
+  const log = $("log");
+  if (log) log.textContent = "界面脚本加载失败，请更新 Edge 或改用 Chrome。";
+  window.alert("界面脚本加载失败，请更新 Edge 或改用 Chrome。\n" + (err && err.message ? err.message : err));
 }
 
 function connectWs() {
@@ -373,7 +385,7 @@ async function refreshCounts() {
     }
     applySourceStatus(data);
     if ("running" in data) setStatus(Boolean(data.running));
-  } catch {
+  } catch (ignore) {
     /* keep the last known counts */
   }
 }

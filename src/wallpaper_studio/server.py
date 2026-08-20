@@ -81,6 +81,11 @@ state = StudioState()
 def create_app() -> FastAPI:
     app = FastAPI(title="Wallpaper Studio", version=__version__)
     app.include_router(demo_router)
+
+    @app.get("/static/studio.js")
+    async def studio_js() -> FileResponse:
+        return FileResponse(WEB_DIR / "studio.js", media_type="text/javascript; charset=utf-8")
+
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
     @app.exception_handler(Exception)

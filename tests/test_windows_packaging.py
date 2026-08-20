@@ -27,9 +27,11 @@ def test_windows_packaging_files_exist():
     assert "refreshCounts" in ui
     assert "parseJson" in ui
     assert "任务已开始" in ui
-    assert "??" not in ui or "source_count ?? $" not in ui
+    assert "??" not in ui
+    assert "replaceAll" not in ui
     html = (root / "src" / "wallpaper_studio" / "web" / "index.html").read_text(encoding="utf-8")
     assert "studio.js" in html
+    assert "charset=" in html
 
 
 def test_studio_js_has_valid_syntax():
