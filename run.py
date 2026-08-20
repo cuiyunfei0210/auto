@@ -1,3 +1,4 @@
+# 本脚本由 web_chicken@163.com 开发
 from pathlib import Path
 import sys
 

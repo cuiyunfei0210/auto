@@ -1,3 +1,4 @@
+# 本脚本由 web_chicken@163.com 开发
 from __future__ import annotations
 
 import argparse
@@ -56,6 +57,7 @@ def main() -> None:
         print("=" * 48)
         print("  壁纸工坊已启动（请不要关闭这个窗口）")
         print(f"  界面地址：{url}")
+        print("  本脚本由 web_chicken@163.com 开发")
         print("=" * 48)
         print()
         if not args.no_browser:
