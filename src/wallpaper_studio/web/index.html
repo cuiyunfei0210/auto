@@ -51,7 +51,7 @@
             </label>
             <div class="stats">
               <div><em id="source-count">0</em><span>源图</span></div>
-              <div><em id="output-count">0</em><span>待上传</span></div>
+              <div><em id="output-count">0</em><span>结果图</span></div>
               <div><em id="account-count">0</em><span>账号</span></div>
             </div>
             <div class="actions">
@@ -60,8 +60,9 @@
               <button class="ghost" id="btn-save">保存设置</button>
             </div>
             <p class="hint" id="path-hint"></p>
+            <p class="hint" id="count-hint"></p>
             <p class="hint error" id="source-hint" hidden></p>
-            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。二创走 xmapi 的 gpt-image-2 生图，大约要几十秒，请看右侧日志。</p>
+            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。二创走 xmapi 的 gpt-image-2 生图，大约要几十秒，请看右侧日志。本轮按源图张数处理；结果图多出来的是输出文件夹里上次留下的，不会多传一轮。</p>
           </article>
           <article class="card log-card">
             <h2>运行日志</h2>
@@ -76,7 +77,7 @@
           <label>源文件夹（原图）<input id="source_dir" placeholder="例如 D:\wallpapers\source"></label>
           <label>输出文件夹（二创结果 / 待上传）<input id="output_dir" placeholder="例如 D:\wallpapers\output"></label>
           <p class="hint" id="folder-resolved"></p>
-          <p class="hint">留空则读取程序旁边的 data\source。请把 png/jpg/webp 放进「实际读取」的那个目录，子文件夹里的图也会算。不要只放到桌面或 WallpaperStudio 根目录。拷好后回到「任务」页，源图数字过一两秒会自己更新。</p>
+          <p class="hint">留空则读取程序旁边的 data\source。请把 png/jpg/webp 放进「实际读取」的那个目录，子文件夹里的图也会算。不要只放到桌面或 WallpaperStudio 根目录。拷好后回到「任务」页，源图数字过一两秒会自己更新。输出目录里会堆积历次二创结果；只想看本轮的话，可先清空 data\output。</p>
         </article>
       </section>
 
@@ -179,6 +180,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260820k" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260820n" charset="utf-8"></script>
 </body>
 </html>

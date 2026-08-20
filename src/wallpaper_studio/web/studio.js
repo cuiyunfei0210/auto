@@ -174,6 +174,16 @@ function applySourceStatus(data) {
   if ($("path-hint") && data.source_dir) {
     $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
   }
+  const countHint = $("count-hint");
+  if (countHint) {
+    const sourceCount = Number(data.source_count || 0);
+    const outputCount = Number(data.output_count || 0);
+    if (outputCount > sourceCount && sourceCount >= 0) {
+      countHint.textContent = `结果图比源图多 ${outputCount - sourceCount} 张，是输出文件夹里上次二创留下的。本轮仍按 ${sourceCount} 张源图处理，不会把旧文件再传一遍。`;
+    } else {
+      countHint.textContent = "";
+    }
+  }
   const hint = $("source-hint");
   if (hint) {
     hint.textContent = data.source_note || "";
