@@ -45,6 +45,11 @@ class SiteProfile(BaseModel):
     headless: bool = True
     navigation_timeout_ms: int = 45000
 
+    @field_validator("min_width", "min_height")
+    @classmethod
+    def no_image_size_limit(cls, _value: int) -> int:
+        return 0
+
 
 class Account(BaseModel):
     username: str

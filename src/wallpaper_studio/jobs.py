@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Awaitable
 from pathlib import Path
 
-from wallpaper_studio.files import filter_by_min_size
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.prepare import prepare_images
 from wallpaper_studio.scheduler import plan_account_batches
@@ -30,19 +29,6 @@ async def run_job(
         images = prepare_images(config, emit)
     if not images:
         raise FileNotFoundError("没有可上传的图片。")
-    kept, skipped = filter_by_min_size(
-        images, config.site.min_width, config.site.min_height
-    )
-    for name in skipped:
-        emit(
-            f"跳过尺寸不足的图片 {name}，站点要求至少 "
-            f"{config.site.min_width}x{config.site.min_height}"
-        )
-    images = kept
-    if not images:
-        raise FileNotFoundError(
-            f"没有达到 {config.site.min_width}x{config.site.min_height} 的图片可上传。"
-        )
 
     batches = plan_account_batches(images, config.accounts, config.network)
     leftover = sum(len(batch.images) for batch in batches)

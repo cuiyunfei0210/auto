@@ -5,7 +5,7 @@ def test_friendly_message_for_image_generation_tools_error():
     raw = "Tool choice 'image_generation' not found in 'tools' parameter."
     text = friendly_error_message(raw)
     assert "跳过二创" in text
-    assert "1920" in text
+    assert "中转站生图接口坏了" in text
     assert friendly_error_message(text) == text
 
 

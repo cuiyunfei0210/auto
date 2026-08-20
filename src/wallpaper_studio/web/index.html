@@ -60,7 +60,7 @@
               <button class="ghost" id="btn-save">保存设置</button>
             </div>
             <p class="hint" id="path-hint"></p>
-            <p class="hint">二创依赖中转站生图接口。若日志出现 image_generation / tools 报错，请改用「跳过二创」直接上传原图（需 ≥ 1920×1080）。账号必须先在「账号」页添加。</p>
+            <p class="hint">二创依赖中转站生图接口。若日志出现 image_generation / tools 报错，请改用「跳过二创」直接上传原图。账号必须先在「账号」页添加。</p>
           </article>
           <article class="card log-card">
             <h2>运行日志</h2>
@@ -125,7 +125,7 @@
       <section class="pane hidden" id="pane-site">
         <article class="card">
           <h2>模拟网页上传</h2>
-          <p class="hint">默认已对接 CQwall：首页邮箱登录弹层 → 创作中心上传。图片不能小于 1920×1080。账号密码请在「账号」页填写，不要写进代码。</p>
+          <p class="hint">默认已对接 CQwall：首页邮箱登录弹层 → 创作中心上传。不限制图片宽高。账号密码请在「账号」页填写，不要写进代码。</p>
           <label>站点模板
             <select id="site_preset">
               <option value="cqwall">CQwall（www.cqwall.com）</option>
@@ -150,8 +150,6 @@
             <label>协议勾选选择器<input id="agree_selector"></label>
             <label>发布按钮选择器<input id="submit_selector"></label>
             <label>成功提示文字<input id="success_text"></label>
-            <label>最小宽度<input id="min_width" type="number" min="0"></label>
-            <label>最小高度<input id="min_height" type="number" min="0"></label>
             <label class="choice">
               <input type="checkbox" id="headless">
               <span>后台运行浏览器（不弹出窗口）</span>

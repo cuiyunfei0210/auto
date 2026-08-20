@@ -77,8 +77,8 @@ def cqwall_site() -> SiteProfile:
         agree_selector='#layer-upload input[name="remember"]',
         submit_selector='#layer-upload button[lay-filter="wallpaper"]',
         success_text="",
-        min_width=1920,
-        min_height=1080,
+        min_width=0,
+        min_height=0,
         headless=True,
     )
 

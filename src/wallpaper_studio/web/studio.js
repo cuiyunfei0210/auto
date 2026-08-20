@@ -12,7 +12,6 @@ const siteFields = [
   "file_input_selector", "file_uploaded_text", "title_selector",
   "category_selector", "category_value", "agree_selector", "submit_selector", "success_text",
 ];
-const siteNumbers = ["min_width", "min_height"];
 
 const apiFields = ["base_url", "api_key", "remix_model", "filename_model", "remix_prompt", "filename_prompt", "image_size"];
 
@@ -47,7 +46,8 @@ function collectConfig() {
 
   const site = {};
   for (const key of siteFields) site[key] = $(key).value;
-  for (const key of siteNumbers) site[key] = Number($(key).value || 0);
+  site.min_width = 0;
+  site.min_height = 0;
   site.headless = $("headless").checked;
 
   const api = {};
@@ -76,7 +76,6 @@ function applyConfig(config) {
   $("source_dir").value = config.paths.source_dir || "";
   $("output_dir").value = config.paths.output_dir || "";
   for (const key of siteFields) $(key).value = config.site[key] ?? "";
-  for (const key of siteNumbers) $(key).value = config.site[key] ?? 0;
   $("headless").checked = Boolean(config.site.headless);
   if ($("site_preset")) {
     $("site_preset").value = (config.site.login_url || "").includes("cqwall.com") ? "cqwall" : "demo";
@@ -190,7 +189,6 @@ if ($("site_preset")) {
     const preset = presets[$("site_preset").value];
     if (!preset) return;
     for (const key of siteFields) $(key).value = preset[key] ?? "";
-    for (const key of siteNumbers) $(key).value = preset[key] ?? 0;
     $("headless").checked = Boolean(preset.headless);
   };
 }

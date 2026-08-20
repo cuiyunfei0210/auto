@@ -23,6 +23,19 @@ def test_home_and_config_roundtrip(studio_home):
     assert saved.json()["config"]["accounts"][0]["username"] == "demo1"
 
 
+def test_config_clears_image_size_limits(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["site"]["min_width"] = 1920
+    payload["site"]["min_height"] = 1080
+    saved = client.post("/api/config", json=payload)
+    assert saved.status_code == 200
+    site = saved.json()["config"]["site"]
+    assert site["min_width"] == 0
+    assert site["min_height"] == 0
+
+
 def test_start_rejects_shared_proxy(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())

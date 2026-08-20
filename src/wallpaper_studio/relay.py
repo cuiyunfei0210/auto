@@ -26,7 +26,6 @@ def friendly_error_message(raw: str) -> str:
             "这不是电脑故障，也不是壁纸工坊崩溃。"
             "请先改成「跳过二创，直接上传源文件夹」，把原图传到 cqwall；"
             "等中转站修好 gpt-image 再开二创。"
-            "原图宽高必须 ≥ 1920×1080。"
         )
     if "batch_image_disabled" in lowered or "batch image" in lowered:
         return (
