@@ -34,17 +34,31 @@ class StudioState:
         self.subscribers: set[WebSocket] = set()
         self._lock = asyncio.Lock()
 
-    async def emit(self, message: str) -> None:
-        self.logs.append(message)
+    def note(self, message: str) -> None:
+        """Record a log line immediately so later failure text cannot jump ahead."""
+        text = (message or "").strip()
+        if not text:
+            return
+        self.logs.append(text)
         self.logs = self.logs[-400:]
+
+    async def send_event(self, payload: dict[str, Any]) -> None:
         stale: list[WebSocket] = []
+        raw = json.dumps(payload)
         for ws in list(self.subscribers):
             try:
-                await ws.send_text(json.dumps({"type": "log", "message": message}))
+                await ws.send_text(raw)
             except Exception:
                 stale.append(ws)
         for ws in stale:
             self.subscribers.discard(ws)
+
+    async def broadcast(self, message: str) -> None:
+        await self.send_event({"type": "log", "message": message})
+
+    async def emit(self, message: str) -> None:
+        self.note(message)
+        await self.broadcast(message)
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -118,9 +132,10 @@ def create_app() -> FastAPI:
             state.last_error = None
             state.last_result = None
             state.logs = []
+            state.note("任务已开始")
             state.task = asyncio.create_task(_run(config))
-        await state.emit("任务已开始")
-        return JSONResponse({"ok": True})
+        await state.send_event({"type": "reset", "logs": state.logs, "running": True})
+        return JSONResponse({"ok": True, "logs": list(state.logs)})
 
     @app.post("/api/stop")
     async def api_stop() -> JSONResponse:
@@ -147,29 +162,41 @@ def create_app() -> FastAPI:
 
 
 async def _run(config: AppConfig) -> None:
+    loop = asyncio.get_running_loop()
+    broadcasts: list[asyncio.Task] = []
+
+    def schedule_broadcast(text: str) -> None:
+        broadcasts.append(asyncio.create_task(state.broadcast(text)))
+
+    def log(message: str) -> None:
+        state.note(message)
+        loop.call_soon_threadsafe(schedule_broadcast, message)
+
+    async def flush_logs() -> None:
+        await asyncio.sleep(0)
+        if broadcasts:
+            await asyncio.gather(*broadcasts)
+            broadcasts.clear()
+
     try:
-        result = await run_job(config, log=lambda message: asyncio.create_task(state.emit(message)))
+        result = await run_job(config, log=log)
+        await flush_logs()
         state.last_result = result
         await state.emit("任务完成")
     except asyncio.CancelledError:
+        await flush_logs()
         state.last_error = "已手动停止"
         await state.emit("任务已停止")
         raise
     except Exception as exc:  # noqa: BLE001
+        await flush_logs()
         message = friendly_error_message(str(exc)).lstrip(": ").strip()
         state.last_error = message
         await state.emit(f"任务失败：{message}")
     finally:
         state.running = False
         state.task = None
-        stale = []
-        for ws in list(state.subscribers):
-            try:
-                await ws.send_text(json.dumps({"type": "done", **state.snapshot()}))
-            except Exception:
-                stale.append(ws)
-        for ws in stale:
-            state.subscribers.discard(ws)
+        await state.send_event({"type": "done", **state.snapshot()})
 
 
 app = create_app()

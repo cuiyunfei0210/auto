@@ -188,6 +188,7 @@ $("btn-start").onclick = async () => {
     return;
   }
   setStatus(true);
+  renderLogs(data.logs || ["任务已开始"]);
 };
 $("btn-stop").onclick = async () => {
   await fetch("/api/stop", { method: "POST" });
@@ -206,15 +207,16 @@ function connectWs() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
   ws.onmessage = (event) => {
     const payload = JSON.parse(event.data);
+    if (payload.type === "hello" || payload.type === "reset" || payload.type === "done") {
+      renderLogs(payload.logs || []);
+      if (payload.type === "done") setStatus(false);
+      else if ("running" in payload) setStatus(Boolean(payload.running));
+      return;
+    }
     if (payload.message) {
       const log = $("log");
       log.textContent = `${log.textContent}\n${payload.message}`.trim();
-      log.scrollTop = log.scrollHeight;
-    }
-    if (payload.type === "done" || payload.running === false) setStatus(Boolean(payload.running));
-    if (payload.type === "hello") {
-      renderLogs(payload.logs);
-      setStatus(payload.running);
+      log.scrollTop = $("log").scrollHeight;
     }
   };
   ws.onclose = () => setTimeout(connectWs, 1500);

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Awaitable
 from pathlib import Path
 
@@ -26,7 +27,12 @@ async def run_job(
         images = list(prepared or [])
     else:
         emit("正在准备待上传图片…")
-        images = prepare_images(config, emit)
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            images = prepare_images(config, emit)
+        else:
+            images = await asyncio.to_thread(prepare_images, config, emit)
     if not images:
         raise FileNotFoundError("没有可上传的图片。")
 

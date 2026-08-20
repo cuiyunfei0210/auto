@@ -97,3 +97,15 @@ def test_start_returns_409_when_a_job_is_already_running(studio_home):
         assert "正在运行" in started.json()["error"]
     finally:
         studio_state.running = False
+
+
+def test_log_note_keeps_failure_after_progress():
+    from wallpaper_studio.server import StudioState
+
+    studio = StudioState()
+    studio.note("正在准备待上传图片…")
+    studio.note("正在二创 wall.png …")
+    studio.note("任务失败：上游暂时不可用")
+    assert studio.logs[0].startswith("正在准备")
+    assert studio.logs[1].startswith("正在二创")
+    assert studio.logs[-1].startswith("任务失败")
