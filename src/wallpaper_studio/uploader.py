@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Awaitable
 from pathlib import Path
 
+from wallpaper_studio.browser import chromium_launch_attempts, configure_playwright_env
 from wallpaper_studio.models import Account, AccountBatch, SiteProfile
 from wallpaper_studio.sites import map_category
 
@@ -25,12 +26,28 @@ class BrowserUploader:
 
         await self.close()
         self.log(f"登录账号 {account.username}")
+        configure_playwright_env()
         self._playwright = await async_playwright().start()
-        launch_kwargs: dict = {"headless": self.site.headless}
         if proxy:
-            launch_kwargs["proxy"] = {"server": proxy}
             self.log(f"当前代理：{proxy}")
-        self._browser = await self._playwright.chromium.launch(**launch_kwargs)
+        launch_error: Exception | None = None
+        for launch_kwargs in chromium_launch_attempts(self.site.headless, proxy):
+            channel = launch_kwargs.get("channel")
+            try:
+                self._browser = await self._playwright.chromium.launch(**launch_kwargs)
+                if channel:
+                    self.log(f"未找到内置 Chromium，已改用系统浏览器（{channel}）")
+                launch_error = None
+                break
+            except Exception as exc:  # noqa: BLE001 - try Edge/Chrome before failing
+                launch_error = exc
+                continue
+        if self._browser is None:
+            raise RuntimeError(
+                "找不到上传用的浏览器。"
+                "请重新下载解压完整的 WallpaperStudio 文件夹，或在这台电脑安装 Microsoft Edge / Google Chrome。"
+                f" 原始错误：{launch_error}"
+            ) from launch_error
         self._context = await self._browser.new_context()
         self._page = await self._context.new_page()
         self._page.set_default_timeout(self.site.navigation_timeout_ms)

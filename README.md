@@ -44,7 +44,8 @@
 4. 拉到页面底部 **Artifacts**，下载 `client-Windows`
 5. 解压后打开 `WallpaperStudio\WallpaperStudio.exe`
 
-**一定要先解压整个文件夹**，再双击 exe。不要直接在压缩包里打开，也不要从 WinRAR 的临时目录运行。
+**一定要先解压整个文件夹**，再双击 exe。不要直接在压缩包里打开，也不要从 WinRAR 的临时目录运行。  
+如果提示找不到 `chrome-headless-shell.exe`，说明用的是旧包（没带浏览器）。请重新下载最新一次绿色勾的 `client-Windows`。
 
 也可以在 Actions 页面右上角 **Run workflow** 手动再打一次包。
 Windows / Linux / macOS 都会各打一份。

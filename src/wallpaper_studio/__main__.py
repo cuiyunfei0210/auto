@@ -22,10 +22,12 @@ def main() -> None:
     parser.add_argument("--once", action="store_true", help="不打开界面，按当前配置跑一轮")
     args = parser.parse_args()
 
+    from wallpaper_studio.browser import configure_playwright_env
     from wallpaper_studio.instance_lock import InstanceLock, InstanceLockError
     from wallpaper_studio.paths import app_root
     from wallpaper_studio.storage import load_config
 
+    configure_playwright_env()
     os.chdir(app_root())
 
     if args.once:

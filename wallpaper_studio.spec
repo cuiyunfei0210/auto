@@ -1,6 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+
 root = Path(SPECPATH).resolve()
 web = root / "src" / "wallpaper_studio" / "web"
 readme = root / "packaging" / "exe-readme.txt"
@@ -9,10 +11,26 @@ datas = [(str(web), "wallpaper_studio/web")]
 if readme.exists():
     datas.append((str(readme), "."))
 
+datas += collect_data_files("playwright")
+binaries = collect_dynamic_libs("playwright")
+
+try:
+    import playwright
+except ImportError as exc:  # pragma: no cover - build-time check
+    raise SystemExit("Playwright is not installed in the build environment.") from exc
+
+local_browsers = Path(playwright.__file__).resolve().parent / "driver" / "package" / ".local-browsers"
+if not local_browsers.exists() or not any(local_browsers.iterdir()):
+    raise SystemExit(
+        "Playwright browsers are missing. Set PLAYWRIGHT_BROWSERS_PATH=0 and run: "
+        "python -m playwright install chromium"
+    )
+datas.append((str(local_browsers), "playwright/driver/package/.local-browsers"))
+
 a = Analysis(
     [str(root / "run.py")],
     pathex=[str(root / "src")],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=[
         "uvicorn.logging",
@@ -26,6 +44,7 @@ a = Analysis(
         "playwright",
         "playwright.sync_api",
         "playwright.async_api",
+        "wallpaper_studio.browser",
     ],
     hookspath=[],
     hooksconfig={},

@@ -32,12 +32,10 @@ echo [1/4] 安装打包工具 PyInstaller...
 "%PYEXE%" -m pip install -U pyinstaller
 if errorlevel 1 goto :fail
 
-echo [2/4] 确认已安装 Chromium...
-if not exist "%VENV%\.chromium-ok" (
-  "%PYEXE%" -m playwright install chromium
-  if errorlevel 1 goto :fail
-  echo ok>"%VENV%\.chromium-ok"
-)
+echo [2/4] 把 Chromium 装进 Playwright 目录，便于打进 exe...
+set "PLAYWRIGHT_BROWSERS_PATH=0"
+"%PYEXE%" -m playwright install chromium
+if errorlevel 1 goto :fail
 
 echo [3/4] 开始打包，可能要几分钟，窗口不要关...
 "%PYEXE%" -m PyInstaller --noconfirm --clean wallpaper_studio.spec

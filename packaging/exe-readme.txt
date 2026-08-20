@@ -12,7 +12,8 @@
 - 然后再双击 WallpaperStudio.exe
 
 注意
-- 必须先把整个文件夹解压出来，再双击 WallpaperStudio.exe
+- 必须带上整个 WallpaperStudio 文件夹（里面的 _internal 不能丢）
+- 上传网页需要 Chromium。新打包会把浏览器打进 _internal；若仍提示找不到浏览器，请安装 Microsoft Edge
 - 不要只拷一个 exe，同目录的其它文件也要一起带走
 - 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）
 - 配置和图片在 exe 旁边的 data 文件夹
