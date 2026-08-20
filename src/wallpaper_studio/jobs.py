@@ -49,16 +49,20 @@ async def run_job(
     elif len(batches) > 1:
         emit("未启用代理，本轮多个账号会走当前同一出口。需要分开时请为每个账号准备一个代理。")
 
-    uploaded = await upload_batches(
+    uploaded, skipped = await upload_batches(
         batches,
         config.site,
         log=emit,
         sleep=sleep,
         uploader=uploader,
     )
-    emit(f"全部结束，成功上传 {uploaded} 张")
+    if skipped:
+        emit(f"全部结束，成功上传 {uploaded} 张，跳过 {skipped} 张")
+    else:
+        emit(f"全部结束，成功上传 {uploaded} 张")
     return {
         "uploaded": uploaded,
+        "skipped": skipped,
         "accounts_used": len(batches),
         "image_count": len(images),
     }

@@ -307,20 +307,29 @@ async def _wait_upload_result(page, site: SiteProfile) -> None:
         raise RuntimeError(f"上传未成功：{text}")
 
 
+def _upload_error_text(exc: BaseException) -> str:
+    text = str(exc).strip().replace("原始错误：:", "原始错误：")
+    return text or "未知错误"
+
+
 async def upload_batches(
     batches: list[AccountBatch],
     site: SiteProfile,
     log: LogFn | None = None,
     sleep: Callable[[float], Awaitable[None]] | None = None,
     uploader: BrowserUploader | None = None,
-) -> int:
-    """Upload sequentially: finish every image for one account, then switch."""
+) -> tuple[int, int]:
+    """Upload sequentially: finish every image for one account, then switch.
+
+    One image failing no longer stops the rest of the queue.
+    """
     import asyncio
 
     emit = log or (lambda _message: None)
     sleeper = sleep or asyncio.sleep
     client = uploader or BrowserUploader(site, emit)
     uploaded = 0
+    skipped = 0
     try:
         for batch_index, batch in enumerate(batches, start=1):
             emit(
@@ -330,8 +339,15 @@ async def upload_batches(
             await client.start_account(batch.account, batch.proxy)
             for image_index, image in enumerate(batch.images, start=1):
                 title = image.stem
-                await client.upload_image(image, title, site.category_value)
-                uploaded += 1
+                try:
+                    await client.upload_image(image, title, site.category_value)
+                    uploaded += 1
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - skip this file and keep the queue moving
+                    skipped += 1
+                    emit(f"跳过 {image.name}：{_upload_error_text(exc)}")
+                    emit("已跳过，继续下一张")
                 if image_index < len(batch.images) and batch.account.interval_seconds > 0:
                     emit(f"等待 {batch.account.interval_seconds:.0f} 秒后上传下一张")
                     await sleeper(batch.account.interval_seconds)
@@ -339,4 +355,4 @@ async def upload_batches(
             await client.close()
     finally:
         await client.close()
-    return uploaded
+    return uploaded, skipped

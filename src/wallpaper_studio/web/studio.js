@@ -353,7 +353,12 @@ function connectWs() {
         if (payload.last_error) notify(`任务失败：\n${payload.last_error}`);
         else if (payload.last_result) {
           const uploaded = payload.last_result.uploaded;
-          notify(`任务完成：成功上传 ${uploaded} 张。`);
+          const skipped = payload.last_result.skipped || 0;
+          if (skipped) {
+            notify(`任务结束：成功上传 ${uploaded} 张，跳过 ${skipped} 张。失败原因在右侧日志，已自动继续下一张。`);
+          } else {
+            notify(`任务完成：成功上传 ${uploaded} 张。`);
+          }
         } else {
           notify("任务已结束。请看右侧运行日志。");
         }

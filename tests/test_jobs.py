@@ -50,6 +50,7 @@ async def test_job_uploads_one_account_then_switches(studio_home):
 
     result = await run_job(config, sleep=fake_sleep, uploader=uploader)
     assert result["uploaded"] == 3
+    assert result["skipped"] == 0
     assert result["accounts_used"] == 2
     kinds = [event[0] for event in uploader.events]
     assert kinds == [
@@ -67,6 +68,38 @@ async def test_job_uploads_one_account_then_switches(studio_home):
     assert uploader.events[1][1] == "demo1"
     assert uploader.events[5][1] == "demo2"
     assert waits == [0.01]
+
+
+async def test_job_skips_failed_image_and_continues(studio_home):
+    config = AppConfig(
+        mode="upload_only",
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        site=SiteProfile(category_value="风景"),
+        accounts=[Account(username="demo1", password="123123", upload_count=3, interval_seconds=0)],
+    )
+    save_config(config)
+    folder = source_dir(config)
+    make_png(folder / "keep-a.png")
+    make_png(folder / "bad.png", (1, 2, 3))
+    make_png(folder / "keep-b.png", (4, 5, 6))
+    logs: list[str] = []
+
+    class FlakyUploader(RecordingUploader):
+        async def upload_image(self, image: Path, title: str, category: str) -> None:
+            if image.name == "bad.png":
+                raise RuntimeError(
+                    "图片没有传到网站。CQwall 要求不少于 1920×1080，且必须在创作者中心上传。"
+                    " 原始错误：: Timeout 45000ms exceeded."
+                )
+            await super().upload_image(image, title, category)
+
+    result = await run_job(config, log=logs.append, uploader=FlakyUploader())
+    assert result["uploaded"] == 2
+    assert result["skipped"] == 1
+    assert any("跳过 bad.png" in line for line in logs)
+    assert any("继续下一张" in line for line in logs)
+    assert any("跳过 1 张" in line for line in logs)
+    assert not any(line.startswith("任务失败") for line in logs)
 
 
 async def test_job_gives_each_account_its_own_proxy(studio_home):
