@@ -44,6 +44,8 @@
 4. 拉到页面底部 **Artifacts**，下载 `client-Windows`
 5. 解压后打开 `WallpaperStudio\WallpaperStudio.exe`
 
+**一定要先解压整个文件夹**，再双击 exe。不要直接在压缩包里打开，也不要从 WinRAR 的临时目录运行。
+
 也可以在 Actions 页面右上角 **Run workflow** 手动再打一次包。
 Windows / Linux / macOS 都会各打一份。
 
@@ -83,7 +85,7 @@ python run.py
 ## 二创
 
 在「二创 API」填中转站地址和 API Key（只保存在本机 `data/config.json`）。  
-当前部分中转站的 `/v1/images/edits` 通道可能不可用，这时用跳过二创即可。
+当前部分中转站的 `/v1/images/edits` 通道可能不可用（例如返回 `Tool choice 'image_generation' not found in 'tools' parameter`）。这时请改用 **跳过二创，直接上传源文件夹**。文件名接口一般仍可用。
 
 文件名提示词会走 `/v1/chat/completions`，用生成的标题作为上传标题。
 

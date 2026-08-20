@@ -21,6 +21,8 @@ async def run_job(
     prepared: list[Path] | None = None,
 ) -> dict:
     emit = log or (lambda _message: None)
+    if not config.accounts:
+        raise ValueError("还没有添加账号。请先到「账号」页填 cqwall 邮箱和密码，再开始任务。")
     if skip_prepare:
         images = list(prepared or [])
     else:
@@ -41,8 +43,6 @@ async def run_job(
         raise FileNotFoundError(
             f"没有达到 {config.site.min_width}x{config.site.min_height} 的图片可上传。"
         )
-    if not config.accounts:
-        raise ValueError("请至少添加一个账号。")
 
     batches = plan_account_batches(images, config.accounts, config.network)
     leftover = sum(len(batch.images) for batch in batches)

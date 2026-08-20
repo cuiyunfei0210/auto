@@ -43,3 +43,19 @@ def test_start_rejects_shared_proxy(studio_home):
     started = client.post("/api/start")
     assert started.status_code == 400
     assert "独立出口" in started.json()["error"]
+
+
+def test_start_rejects_empty_accounts(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    started = client.post("/api/start")
+    assert started.status_code == 400
+    assert "账号" in started.json()["error"]
+
+
+def test_state_includes_archive_warning_field(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    state = client.get("/api/state").json()
+    assert "archive_warning" in state
+    assert state["archive_warning"] is None

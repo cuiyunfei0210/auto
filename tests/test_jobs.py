@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from wallpaper_studio.jobs import run_job
 from wallpaper_studio.models import Account, AppConfig, NetworkSettings, PathSettings, SiteProfile
 from wallpaper_studio.storage import save_config, source_dir
@@ -90,3 +92,10 @@ async def test_job_gives_each_account_its_own_proxy(studio_home):
     starts = [event for event in uploader.events if event[0] == "start"]
     assert starts[0] == ("start", "demo1", "http://10.0.0.1:8080")
     assert starts[1] == ("start", "demo2", "http://10.0.0.2:8080")
+
+
+async def test_job_requires_accounts_before_prepare(studio_home):
+    config = AppConfig(mode="remix_then_upload")
+    save_config(config)
+    with pytest.raises(ValueError, match="还没有添加账号"):
+        await run_job(config)

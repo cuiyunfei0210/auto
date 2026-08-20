@@ -113,6 +113,16 @@ async function refresh() {
   $("source-count").textContent = data.source_count;
   $("output-count").textContent = data.output_count;
   $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
+  const banner = $("env-banner");
+  if (banner) {
+    if (data.archive_warning) {
+      banner.textContent = data.archive_warning;
+      banner.hidden = false;
+    } else {
+      banner.textContent = "";
+      banner.hidden = true;
+    }
+  }
   const hint = $("proxy-hint");
   if (hint) {
     if (data.proxy_error) {
@@ -164,7 +174,11 @@ $("btn-start").onclick = async () => {
   await saveConfig();
   const res = await fetch("/api/start", { method: "POST" });
   const data = await res.json();
-  if (!res.ok) alert(data.error || "无法开始");
+  if (!res.ok) {
+    alert(data.error || "无法开始");
+    setStatus(false);
+    return;
+  }
   setStatus(true);
 };
 $("btn-stop").onclick = async () => {

@@ -18,7 +18,8 @@ from wallpaper_studio.storage import load_config, save_config, source_dir, outpu
 from wallpaper_studio.files import list_images
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
 from wallpaper_studio.sites import SITE_PRESETS
-from wallpaper_studio.paths import web_dir
+from wallpaper_studio.paths import archive_temp_warning, web_dir
+from wallpaper_studio.relay import friendly_error_message
 
 WEB_DIR = web_dir()
 
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
         except ProxyAssignmentError as exc:
             payload["proxy_assignments"] = []
             payload["proxy_error"] = str(exc)
+        payload["archive_warning"] = archive_temp_warning()
         return JSONResponse(payload)
 
     @app.post("/api/config")
@@ -100,6 +102,14 @@ def create_app() -> FastAPI:
             if state.running:
                 return JSONResponse({"ok": False, "error": "任务正在运行"}, status_code=409)
             config = load_config()
+            if not config.accounts:
+                return JSONResponse(
+                    {
+                        "ok": False,
+                        "error": "还没有添加账号。请先到「账号」页填 cqwall 邮箱和密码，再开始任务。",
+                    },
+                    status_code=400,
+                )
             try:
                 preview_proxy_assignments(config.accounts, config.network)
             except ProxyAssignmentError as exc:
@@ -146,8 +156,9 @@ async def _run(config: AppConfig) -> None:
         await state.emit("任务已停止")
         raise
     except Exception as exc:  # noqa: BLE001
-        state.last_error = str(exc)
-        await state.emit(f"任务失败：{exc}")
+        message = friendly_error_message(str(exc))
+        state.last_error = message
+        await state.emit(f"任务失败：{message}")
     finally:
         state.running = False
         state.task = None

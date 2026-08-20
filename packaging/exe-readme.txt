@@ -12,6 +12,9 @@
 - 然后再双击 WallpaperStudio.exe
 
 注意
+- 必须先把整个文件夹解压出来，再双击 WallpaperStudio.exe
 - 不要只拷一个 exe，同目录的其它文件也要一起带走
+- 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）
 - 配置和图片在 exe 旁边的 data 文件夹
 - 同一台电脑只能开一份
+- 中转站生图报 image_generation / tools 错时，改用「跳过二创」上传原图（需 ≥ 1920×1080）

@@ -8,6 +8,33 @@ def is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def is_archive_temp_path(path: Path | None = None) -> bool:
+    """True if the program is running from a zip/rar 'open without extracting' temp folder."""
+    text = str(path or app_root()).replace("/", "\\").lower()
+    needles = (
+        "rar$ex",
+        "rartemp",
+        r"\temp\7zo",
+        r"\temp\wz",
+        "\\inetcache\\",
+        "\\content.outlook\\",
+        "\\temporary internet files\\",
+    )
+    return any(needle in text for needle in needles)
+
+
+def archive_temp_warning(path: Path | None = None) -> str | None:
+    if not is_frozen():
+        return None
+    if not is_archive_temp_path(path):
+        return None
+    return (
+        "程序正在压缩包临时目录里运行（没有先解压）。"
+        "请先把整个 WallpaperStudio 文件夹解压到桌面或 D 盘，再双击里面的 WallpaperStudio.exe。"
+        "不要直接双击压缩包里的程序。"
+    )
+
+
 def app_root() -> Path:
     """Directory that owns data/, start.bat, and the Windows exe."""
     if is_frozen():

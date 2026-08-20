@@ -14,6 +14,27 @@ class ApiError(RuntimeError):
     pass
 
 
+def friendly_error_message(raw: str) -> str:
+    """Turn known relay/API failures into an actionable Chinese explanation."""
+    text = (raw or "").strip()
+    if "中转站生图接口坏了" in text or "中转站已关闭批量生图" in text:
+        return text
+    lowered = text.lower()
+    if "image_generation" in lowered and "tools" in lowered:
+        return (
+            "中转站生图接口坏了：对方返回 Tool choice 'image_generation' not found in 'tools' parameter。"
+            "这不是电脑故障，也不是壁纸工坊崩溃。"
+            "请先改成「跳过二创，直接上传源文件夹」，把原图传到 cqwall；"
+            "等中转站修好 gpt-image 再开二创。"
+            "原图宽高必须 ≥ 1920×1080。"
+        )
+    if "batch_image_disabled" in lowered or "batch image" in lowered:
+        return (
+            "中转站已关闭批量生图接口。请改成「跳过二创，直接上传」，或换一组能用的图片模型。"
+        )
+    return text or "未知错误"
+
+
 class RelayClient:
     def __init__(self, settings: ApiSettings, timeout: float = 180.0) -> None:
         self.settings = settings
@@ -92,9 +113,9 @@ def _json_or_error(response: httpx.Response) -> dict:
         raise ApiError(f"接口返回了非 JSON 内容（HTTP {response.status_code}）。") from exc
     if response.status_code >= 400:
         message = _error_message(data) or f"HTTP {response.status_code}"
-        raise ApiError(message)
+        raise ApiError(friendly_error_message(message))
     if isinstance(data, dict) and data.get("error"):
-        raise ApiError(_error_message(data))
+        raise ApiError(friendly_error_message(_error_message(data)))
     return data if isinstance(data, dict) else {"data": data}
 
 

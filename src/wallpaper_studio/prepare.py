@@ -6,7 +6,7 @@ from shutil import copy2
 
 from wallpaper_studio.files import list_images, sanitize_filename, unique_path
 from wallpaper_studio.models import AppConfig
-from wallpaper_studio.relay import RelayClient
+from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
@@ -42,7 +42,12 @@ def prepare_images(config: AppConfig, log: LogFn | None = None) -> list[Path]:
         if config.mode == "remix_then_upload":
             assert client is not None
             emit(f"正在二创 {image.name} …")
-            prepared.append(client.remix_image(image, dest, title))
+            try:
+                prepared.append(client.remix_image(image, dest, title))
+            except ApiError as exc:
+                raise ApiError(
+                    f"{image.name} 二创失败。{friendly_error_message(str(exc))}"
+                ) from exc
             emit(f"已保存二创结果 {prepared[-1].name}")
         else:
             target = unique_path(dest, title, image.suffix.lower())
