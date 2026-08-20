@@ -37,7 +37,11 @@ def test_friendly_message_for_upstream_unavailable():
     assert friendly_error_message(text) == text
 
 
-def test_friendly_message_for_batch_image_disabled():
+def test_friendly_message_for_no_compatible_accounts():
+    text = friendly_error_message("/v1/images/edits: No available compatible accounts")
+    assert "中转站" in text
+    assert "跳过二创" in text
+    assert friendly_error_message(text) == text
     text = friendly_error_message("BATCH_IMAGE_DISABLED")
     assert "跳过二创" in text
 

@@ -42,7 +42,12 @@ def friendly_error_message(raw: str) -> str:
             "这是 xmapi 后面的模型线路抖动，不是图片或账号填错。"
             "程序会自动重试几次；若仍然失败，等一两分钟再跑，或先改用「跳过二创」。"
         )
-    if "batch_image_disabled" in lowered or "batch image" in lowered:
+    if "no available compatible accounts" in lowered or "no available accounts" in lowered:
+        return (
+            "中转站没有可用的生图线路（No available compatible accounts）。"
+            "这是 xmapi 这组 Key 后面没有能跑 gpt-image-2 / 图编辑的账号，不是 CQwall、也不是本地图片坏了。"
+            "请到中转站后台看这组 Key 是否还能生图、额度是否用完；或先改用「跳过二创，直接上传」。"
+        )
         return (
             "中转站已关闭批量生图接口。请改成「跳过二创，直接上传」，或换一组能用的图片模型。"
         )
