@@ -10,7 +10,7 @@ from wallpaper_studio.browser import (
     configure_playwright_env,
 )
 from wallpaper_studio.models import Account, AccountBatch, SiteProfile
-from wallpaper_studio.sites import map_category
+from wallpaper_studio.sites import category_choices, map_category
 
 LogFn = Callable[[str], None]
 
@@ -105,29 +105,8 @@ class BrowserUploader:
         if self.site.title_selector:
             await page.locator(self.site.title_selector).first.fill(title)
         raw_category = category or self.site.category_value
-        mapped = map_category(raw_category)
-        choices = [item for item in (raw_category, mapped) if item]
-        if self.site.category_selector and choices:
-            locator = page.locator(self.site.category_selector).first
-            tag = await locator.evaluate("el => el.tagName.toLowerCase()")
-            if tag == "select":
-                selected = False
-                for item in dict.fromkeys(choices):
-                    try:
-                        await locator.select_option(value=item, timeout=2000)
-                        selected = True
-                        break
-                    except Exception:
-                        try:
-                            await locator.select_option(label=item, timeout=2000)
-                            selected = True
-                            break
-                        except Exception:
-                            continue
-                if not selected:
-                    raise RuntimeError(f"无法选择分类：{raw_category}")
-            else:
-                await locator.fill(mapped or raw_category)
+        if self.site.category_selector and (raw_category or "").strip():
+            await _select_category(page, self.site, raw_category)
         if self.site.agree_selector:
             await _check_agreements(page, self.site.agree_selector)
         await click_even_if_offscreen(
@@ -166,6 +145,76 @@ async def _check_agreements(page, selector: str) -> None:
         nearby = page.locator("#layer-upload .layui-form-checkbox").first
         if await nearby.count():
             await nearby.click()
+
+
+async def _select_category(page, site: SiteProfile, raw_category: str) -> None:
+    choices = category_choices(raw_category)
+    locator = page.locator(site.category_selector).first
+    try:
+        await locator.wait_for(state="attached", timeout=min(8000, site.navigation_timeout_ms))
+    except Exception as exc:
+        raise RuntimeError(f"找不到分类下拉框：{site.category_selector}") from exc
+    tag = await locator.evaluate("el => el.tagName.toLowerCase()")
+    if tag != "select":
+        await locator.fill(map_category(raw_category) or raw_category)
+        return
+    try:
+        await locator.locator("option").nth(1).wait_for(state="attached", timeout=5000)
+    except Exception:
+        pass
+    for item in choices:
+        try:
+            await locator.select_option(value=item, timeout=1500, force=True)
+            return
+        except Exception:
+            pass
+        try:
+            await locator.select_option(label=item, timeout=1500, force=True)
+            return
+        except Exception:
+            continue
+    for item in choices:
+        changed = await locator.evaluate(
+            """(el, value) => {
+                const option = [...el.options].find((row) =>
+                    row.value === value || (row.textContent || "").trim() === value
+                );
+                if (!option) return false;
+                el.value = option.value;
+                el.dispatchEvent(new Event("change", { bubbles: true }));
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+                return true;
+            }""",
+            item,
+        )
+        if changed:
+            dd = page.locator(f'#layer-upload dd[lay-value="{item}"]').first
+            if await dd.count():
+                try:
+                    await click_even_if_offscreen(dd, 3000)
+                except Exception:
+                    pass
+            return
+    title = page.locator("#layer-upload .layui-form-select .layui-select-title").first
+    if await title.count():
+        await click_even_if_offscreen(title, 5000)
+        for item in choices:
+            dd = page.locator(f'#layer-upload .layui-form-select dd[lay-value="{item}"]').first
+            if await dd.count():
+                await click_even_if_offscreen(dd, 3000)
+                return
+            by_text = page.locator("#layer-upload .layui-form-select dd", has_text=item).first
+            if await by_text.count():
+                await click_even_if_offscreen(by_text, 3000)
+                return
+    available = await locator.evaluate(
+        """el => [...el.options].map((row) => ((row.textContent || "").trim() + "/" + row.value)).filter(Boolean).join("，")"""
+    )
+    raise RuntimeError(
+        f"无法选择分类：{raw_category}。"
+        f"网站当前选项：{available or '空的'}。"
+        "CQwall 的分类是 Layui 下拉框，请到「网页上传」把默认分类改成「风景」或对应中文名后再试。"
+    )
 
 
 async def _visible_layer_messages(page) -> list[str]:

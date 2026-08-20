@@ -13,6 +13,15 @@ def test_map_category_accepts_chinese_and_ids():
     assert map_category("动漫") == "10"
 
 
+def test_category_choices_include_id_and_names():
+    from wallpaper_studio.sites import category_choices
+
+    names = category_choices("9")
+    assert "9" in names
+    assert "风景" in names
+    assert "scenery" in names
+
+
 def test_cqwall_preset_points_at_live_site():
     site = cqwall_site()
     assert site.login_url == "https://www.cqwall.com/"

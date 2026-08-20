@@ -41,6 +41,23 @@ def map_category(value: str) -> str:
     return mapped or text
 
 
+def category_choices(value: str) -> list[str]:
+    """Value/id/English/Chinese aliases to try against a CQwall/Layui select."""
+    raw = (value or "").strip()
+    mapped = map_category(raw)
+    names: list[str] = []
+    for item in (raw, mapped):
+        if item and item not in names:
+            names.append(item)
+    for name, cid in CQWALL_CATEGORIES.items():
+        if cid == mapped or name == raw or name == raw.lower():
+            if name not in names:
+                names.append(name)
+            if cid not in names:
+                names.append(cid)
+    return names
+
+
 def demo_site(base: str = "http://127.0.0.1:8765") -> SiteProfile:
     return SiteProfile(
         login_url=f"{base}/demo/login",
