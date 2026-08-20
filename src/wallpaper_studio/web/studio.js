@@ -102,6 +102,13 @@ function setStatus(running) {
   $("btn-stop").disabled = !running;
 }
 
+function renderLogs(lines) {
+  const log = $("log");
+  if (!log) return;
+  log.textContent = (lines || []).join("\n");
+  log.scrollTop = log.scrollHeight;
+}
+
 function notify(message) {
   const text = String(message || "").trim() || "发生了未知问题。";
   window.alert(text);
@@ -301,4 +308,9 @@ function connectWs() {
   ws.onclose = () => setTimeout(connectWs, 1500);
 }
 
-refresh().then(connectWs);
+refresh()
+  .catch((err) => {
+    const message = err && err.message ? err.message : String(err);
+    renderLogs([`界面加载失败：${message}`, "请刷新浏览器，或确认黑色窗口还在。"]);
+  })
+  .finally(connectWs);

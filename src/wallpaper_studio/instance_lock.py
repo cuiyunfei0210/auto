@@ -10,6 +10,14 @@ class InstanceLockError(RuntimeError):
     pass
 
 
+def already_running_message(url: str) -> str:
+    return (
+        "程序已经在运行，同一台电脑只能打开一次。\n"
+        f"正在打开已有界面：{url}\n"
+        "如果浏览器没有弹出，请手动访问上面的地址，不要再反复双击 exe。"
+    )
+
+
 class InstanceLock:
     """Bind a local lock port so the studio cannot be opened twice."""
 

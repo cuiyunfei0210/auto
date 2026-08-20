@@ -10,6 +10,10 @@ def test_home_and_config_roundtrip(studio_home):
     home = client.get("/")
     assert home.status_code == 200
     assert "壁纸工坊" in home.text
+    js = client.get("/static/studio.js")
+    assert js.status_code == 200
+    assert "function renderLogs" in js.text
+    assert "function notify" in js.text
 
     state = client.get("/api/state")
     assert state.status_code == 200

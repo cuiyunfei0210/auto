@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
+import traceback
 import webbrowser
 from pathlib import Path
 
@@ -23,7 +25,7 @@ def main() -> None:
     args = parser.parse_args()
 
     from wallpaper_studio.browser import configure_playwright_env
-    from wallpaper_studio.instance_lock import InstanceLock, InstanceLockError
+    from wallpaper_studio.instance_lock import InstanceLock, InstanceLockError, already_running_message
     from wallpaper_studio.paths import app_root
     from wallpaper_studio.storage import load_config
 
@@ -39,11 +41,14 @@ def main() -> None:
         print(result)
         return
 
+    url = f"http://{args.host}:{args.port}"
     lock = InstanceLock()
     try:
         lock.acquire()
-    except InstanceLockError as exc:
-        print(exc)
+    except InstanceLockError:
+        print(already_running_message(url))
+        if not args.no_browser:
+            webbrowser.open(url)
         _pause_if_windows()
         sys.exit(1)
 
@@ -51,7 +56,6 @@ def main() -> None:
         import uvicorn
         from wallpaper_studio.server import app
 
-        url = f"http://{args.host}:{args.port}"
         print()
         print("=" * 48)
         print("  壁纸工坊已启动（请不要关闭这个窗口）")
@@ -61,13 +65,30 @@ def main() -> None:
         if not args.no_browser:
             webbrowser.open(url)
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    except OSError as exc:
+        print(f"无法启动界面服务：{exc}")
+        print("请检查 8765 端口是否被占用，或在任务管理器结束 WallpaperStudio.exe 后再打开。")
+        print(f"也可以先试着打开：{url}")
+        _pause_if_windows()
+        sys.exit(1)
+    except Exception:
+        traceback.print_exc()
+        _pause_if_windows()
+        sys.exit(1)
     finally:
         lock.release()
 
 
-def _pause_if_windows() -> None:
-    if os.name == "nt" and sys.stdin.isatty():
-        input("按回车键退出…")
+def _pause_if_windows(seconds: float = 4) -> None:
+    if os.name != "nt":
+        return
+    try:
+        if sys.stdin and sys.stdin.isatty():
+            input("按回车键退出…")
+            return
+    except Exception:
+        pass
+    time.sleep(seconds)
 
 
 if __name__ == "__main__":
