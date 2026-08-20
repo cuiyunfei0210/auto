@@ -15,7 +15,24 @@
 第一次会自动创建环境、安装组件和 Chromium。装完后浏览器会打开 `http://127.0.0.1:8765`。  
 **用完之前不要关掉那个黑色命令行窗口**，关掉就等于退出程序。
 
-也可以自己打包成 exe：双击 `build-windows.bat`，生成 `dist\WallpaperStudio\WallpaperStudio.exe`。
+也可以自己打包成桌面 exe，步骤如下。
+
+## 做成桌面 exe
+
+在 **Windows 电脑**上操作（Linux/Mac 打不出 Windows 的 exe）。
+
+1. 先安装 [Python 3.11+](https://www.python.org/downloads/windows/)，勾选 **Add python.exe to PATH**。
+2. 把整个项目文件夹放到电脑上，例如 `D:\wallpaper-studio`。
+3. （建议）**先双击一次** `打开壁纸工坊.bat`，等它装完。不是必须，但能提前把 Chromium 装好。
+4. **双击** `build-windows.bat`，等几分钟，不要关窗口。
+5. 结束后会自动打开文件夹  
+   `项目目录\dist\WallpaperStudio\`
+6. **双击** `WallpaperStudio.exe`。浏览器会打开 `http://127.0.0.1:8765`。  
+   黑色窗口不要关。
+
+以后日常使用只需要第 6 步。可以把 `dist\WallpaperStudio` 整个文件夹拷到桌面；**不要只拷一个 exe**，同目录文件要一起带着。
+
+配置和图片在 exe 旁边的 `data` 文件夹里。
 
 ## 能做什么
 
