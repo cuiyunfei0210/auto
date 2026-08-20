@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from shutil import copy2
 
-from wallpaper_studio.files import list_images, sanitize_filename, unique_path
+from wallpaper_studio.files import empty_source_message, list_images, sanitize_filename, unique_path
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.relay import ApiError, RelayClient, chat_model_supports_titles, friendly_error_message
 from wallpaper_studio.storage import output_dir, source_dir
@@ -23,7 +23,7 @@ def prepare_images(config: AppConfig, log: LogFn | None = None) -> list[Path]:
     dest = output_dir(config)
     images = list_images(src)
     if not images:
-        raise FileNotFoundError(f"源文件夹里没有图片：{src}")
+        raise FileNotFoundError(empty_source_message(src))
 
     prepared: list[Path] = []
     client = RelayClient(config.api) if _needs_api(config) else None

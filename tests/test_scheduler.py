@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from wallpaper_studio.files import list_images, sanitize_filename, unique_path
+from wallpaper_studio.files import empty_source_message, list_images, sanitize_filename, unique_path
 from wallpaper_studio.models import Account, NetworkSettings
 from wallpaper_studio.scheduler import (
     ProxyAssignmentError,
@@ -23,6 +23,21 @@ def test_list_images_sorted(tmp_path: Path):
     (tmp_path / "notes.txt").write_bytes(b"x")
     names = [path.name for path in list_images(tmp_path)]
     assert names == ["a.jpg", "b.PNG"]
+
+
+def test_list_images_finds_nested_and_jfif(tmp_path: Path):
+    (tmp_path / "album").mkdir()
+    (tmp_path / "album" / "shot.jfif").write_bytes(b"x")
+    (tmp_path / "notes.txt").write_bytes(b"x")
+    names = [path.name for path in list_images(tmp_path)]
+    assert names == ["shot.jfif"]
+
+
+def test_empty_source_message_lists_other_files(tmp_path: Path):
+    (tmp_path / "readme.txt").write_text("x", encoding="utf-8")
+    text = empty_source_message(tmp_path)
+    assert "没有图片" in text
+    assert "readme.txt" in text
 
 
 def test_unique_path_increments(tmp_path: Path):

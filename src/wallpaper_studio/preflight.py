@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wallpaper_studio.files import list_images
+from wallpaper_studio.files import empty_source_message, list_images
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.paths import archive_temp_warning
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
@@ -19,9 +19,10 @@ def start_problems(config: AppConfig) -> list[str]:
         problems.append("网页上传的登录地址是空的。请到「网页上传」检查。")
     if not (config.site.username_selector or "").strip() or not (config.site.password_selector or "").strip():
         problems.append("网页上传的账号或密码选择器是空的。请到「网页上传」检查。")
-    images = list_images(source_dir(config))
+    src = source_dir(config)
+    images = list_images(src)
     if not images:
-        problems.append(f"源文件夹里没有图片：{source_dir(config)}。请到「文件夹」确认源目录。")
+        problems.append(empty_source_message(src))
     if config.mode == "remix_then_upload":
         has_secret = bool(
             config.api.api_key.strip()

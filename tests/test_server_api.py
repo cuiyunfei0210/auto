@@ -87,6 +87,8 @@ def test_state_includes_archive_warning_field(studio_home):
     state = client.get("/api/state").json()
     assert "archive_warning" in state
     assert state["archive_warning"] is None
+    assert "source_note" in state
+    assert "没有图片" in state["source_note"]
 
 
 def test_start_returns_409_when_a_job_is_already_running(studio_home):
@@ -113,3 +115,16 @@ def test_log_note_keeps_failure_after_progress():
     assert studio.logs[0].startswith("正在准备")
     assert studio.logs[1].startswith("正在二创")
     assert studio.logs[-1].startswith("任务失败")
+
+
+def test_state_counts_nested_source_images(studio_home):
+    from tests.helpers import make_png
+
+    reset_demo_sessions()
+    nested = studio_home / "source" / "batch"
+    make_png(nested / "one.png")
+    client = TestClient(create_app())
+    state = client.get("/api/state").json()
+    assert state["source_count"] == 1
+    assert state["source_note"] == ""
+    assert "one.png" in state["source_samples"]

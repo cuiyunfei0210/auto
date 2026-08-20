@@ -24,6 +24,7 @@ def test_windows_packaging_files_exist():
     assert "function renderLogs" in ui
     assert "function notify(" in ui
     assert "localStartProblems" in ui
+    assert "refreshCounts" in ui
     assert "任务已开始" in ui
     html = (root / "src" / "wallpaper_studio" / "web" / "index.html").read_text(encoding="utf-8")
     assert "studio.js" in html

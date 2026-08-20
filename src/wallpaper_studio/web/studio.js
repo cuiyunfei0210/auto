@@ -119,9 +119,12 @@ function localStartProblems(cfg) {
   if (!cfg.accounts.length) {
     problems.push("还没有账号。请到「账号」页填写 CQwall 邮箱和密码。");
   }
-  const sourceCount = Number($("source-count").textContent || 0);
+  const sourceCount = Number(lastState.source_count ?? $("source-count").textContent || 0);
   if (!Number.isFinite(sourceCount) || sourceCount <= 0) {
-    problems.push("源文件夹里没有图片。请到「文件夹」确认源目录，并放入 png/jpg 图片。");
+    problems.push(
+      lastState.source_note
+      || `源文件夹里没有图片：${lastState.source_dir || $("source_dir").value || "data\\source"}。请把 png/jpg/webp 放进这个目录后再点开始。`
+    );
   }
   if (cfg.mode === "remix_then_upload") {
     if (!(cfg.api.base_url || "").trim()) {
@@ -151,7 +154,26 @@ function formatErrorPayload(data) {
   return "无法开始";
 }
 
+let lastState = {};
 let presets = {};
+
+function applySourceStatus(data) {
+  lastState = data || {};
+  $("source-count").textContent = data.source_count ?? 0;
+  $("output-count").textContent = data.output_count ?? 0;
+  if ($("path-hint") && data.source_dir) {
+    $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
+  }
+  const hint = $("source-hint");
+  if (hint) {
+    hint.textContent = data.source_note || "";
+    hint.hidden = !data.source_note;
+  }
+  const resolved = $("folder-resolved");
+  if (resolved && data.source_dir) {
+    resolved.textContent = `程序实际读取的源目录：${data.source_dir}`;
+  }
+}
 
 async function refresh() {
   const res = await fetch("/api/state");
@@ -161,6 +183,7 @@ async function refresh() {
   $("source-count").textContent = data.source_count;
   $("output-count").textContent = data.output_count;
   $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
+  applySourceStatus(data);
   const banner = $("env-banner");
   if (banner) {
     if (data.archive_warning) {
@@ -214,6 +237,7 @@ document.querySelectorAll("aside nav button").forEach((button) => {
     $(`pane-${pane}`).classList.remove("hidden");
     $("heading").textContent = headings[pane][0];
     $("subheading").textContent = headings[pane][1];
+    if (pane === "folders" || pane === "job") refreshCounts();
   };
 });
 
@@ -233,17 +257,17 @@ $("btn-start").onclick = async () => {
     notify("正在提交开始请求，请稍等。");
     return;
   }
-  const cfg = collectConfig();
-  const local = localStartProblems(cfg);
-  if (local.length) {
-    notify(local.length === 1 ? local[0] : `还不能开始，请先处理：\n${local.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
-    return;
-  }
   $("btn-start").dataset.busy = "1";
   try {
     const saved = await saveConfig({ silent: true });
     if (!saved || saved.ok === false) {
       notify(formatErrorPayload(saved) === "无法开始" ? "保存失败，请检查账号和数字是否填完整。" : formatErrorPayload(saved));
+      return;
+    }
+    const cfg = collectConfig();
+    const local = localStartProblems(cfg);
+    if (local.length) {
+      notify(local.length === 1 ? local[0] : `还不能开始，请先处理：\n${local.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
       return;
     }
     const res = await fetch("/api/start", { method: "POST" });
@@ -308,9 +332,25 @@ function connectWs() {
   ws.onclose = () => setTimeout(connectWs, 1500);
 }
 
+async function refreshCounts() {
+  try {
+    const res = await fetch("/api/state");
+    const data = await res.json();
+    applySourceStatus(data);
+    if ("running" in data) setStatus(Boolean(data.running));
+  } catch {
+    /* keep the last known counts */
+  }
+}
+
 refresh()
   .catch((err) => {
     const message = err && err.message ? err.message : String(err);
     renderLogs([`界面加载失败：${message}`, "请刷新浏览器，或确认黑色窗口还在。"]);
   })
   .finally(connectWs);
+
+setInterval(() => {
+  if ($("btn-start").dataset.busy === "1") return;
+  refreshCounts();
+}, 2500);

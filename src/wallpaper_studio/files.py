@@ -3,19 +3,97 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+IMAGE_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".jpe",
+    ".jfif",
+    ".webp",
+    ".bmp",
+    ".gif",
+    ".tif",
+    ".tiff",
+    ".heic",
+    ".heif",
+}
+SKIP_DIR_NAMES = {".git", "__pycache__", "node_modules", ".venv", "__macosx"}
 UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+MAX_SCAN_DEPTH = 6
+MAX_IMAGES = 2000
 
 
 def list_images(folder: Path) -> list[Path]:
-    if not folder.exists():
+    if not folder.exists() or not folder.is_dir():
         return []
-    files = [
-        path
-        for path in folder.iterdir()
-        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
-    ]
-    return sorted(files, key=lambda item: item.name.lower())
+    root = folder
+    try:
+        root = folder.resolve()
+    except OSError:
+        root = folder
+    found: list[Path] = []
+    scanned = 0
+    try:
+        iterator = root.rglob("*")
+    except OSError:
+        return []
+    for path in iterator:
+        scanned += 1
+        if scanned > 20000:
+            break
+        try:
+            if not path.is_file():
+                continue
+            rel = path.relative_to(root)
+        except OSError:
+            continue
+        except ValueError:
+            continue
+        if len(rel.parts) - 1 > MAX_SCAN_DEPTH:
+            continue
+        if any(part.startswith(".") or part.lower() in SKIP_DIR_NAMES for part in rel.parts[:-1]):
+            continue
+        if path.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        found.append(path)
+        if len(found) >= MAX_IMAGES:
+            break
+    return sorted(found, key=lambda item: str(item).lower())
+
+
+def empty_source_message(folder: Path) -> str:
+    folder = Path(folder)
+    if not folder.exists():
+        return (
+            f"源文件夹不存在：{folder}。"
+            "请到「文件夹」填一个存在的目录，或把图片放到程序旁边的 data\\source。"
+        )
+    if not folder.is_dir():
+        return f"源路径不是文件夹：{folder}。"
+    try:
+        entries = list(folder.iterdir())
+    except OSError as exc:
+        return f"无法读取源文件夹 {folder}：{exc}"
+    parts = [f"源文件夹里没有图片：{folder}。"]
+    files = [path for path in entries if path.is_file()]
+    dirs = [path for path in entries if path.is_dir()]
+    if not entries:
+        parts.append(
+            "这个目录现在是空的。请把 png/jpg/webp 复制进去，不要只放在桌面或 WallpaperStudio 根目录。"
+        )
+        return "".join(parts)
+    if files:
+        shown = "、".join(path.name for path in files[:8])
+        suffixes = sorted({(path.suffix.lower() or "无扩展名") for path in files})
+        parts.append(f"根目录现有文件：{shown}。扩展名：{'、'.join(suffixes)}。")
+        if any(path.suffix.lower() == ".lnk" for path in files):
+            parts.append("快捷方式不算，请放入图片文件本身。")
+        else:
+            parts.append("目前认 png/jpg/jpeg/webp/bmp/gif/jfif/tif。")
+    if dirs:
+        shown = "、".join(path.name for path in dirs[:6])
+        parts.append(f"里面有子文件夹：{shown}。程序会往下找，但这些子文件夹里也没有图片。")
+    return "".join(parts)
 
 
 def sanitize_filename(name: str, fallback: str = "wallpaper") -> str:

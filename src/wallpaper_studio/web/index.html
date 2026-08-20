@@ -60,7 +60,8 @@
               <button class="ghost" id="btn-save">保存设置</button>
             </div>
             <p class="hint" id="path-hint"></p>
-            <p class="hint">点「开始任务」会先检查配置。缺账号、缺图片、二创没填 Key 都会弹窗说明。二创走 xmapi 的 gpt-image-2 生图，大约要几十秒，请看右侧日志。</p>
+            <p class="hint error" id="source-hint" hidden></p>
+            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。二创走 xmapi 的 gpt-image-2 生图，大约要几十秒，请看右侧日志。</p>
           </article>
           <article class="card log-card">
             <h2>运行日志</h2>
@@ -74,7 +75,8 @@
           <h2>图片目录</h2>
           <label>源文件夹（原图）<input id="source_dir" placeholder="例如 D:\wallpapers\source"></label>
           <label>输出文件夹（二创结果 / 待上传）<input id="output_dir" placeholder="例如 D:\wallpapers\output"></label>
-          <p class="hint">留空则使用程序目录下的 data/source 和 data/output。跳过二创时，也会把源图拷到输出目录并可用 API 生成标题。</p>
+          <p class="hint" id="folder-resolved"></p>
+          <p class="hint">留空则读取程序旁边的 data\source。请把 png/jpg/webp 放进「实际读取」的那个目录，子文件夹里的图也会算。不要只放到桌面或 WallpaperStudio 根目录。拷好后回到「任务」页，源图数字过一两秒会自己更新。</p>
         </article>
       </section>
 
@@ -177,6 +179,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260820"></script>
+  <script src="/static/studio.js?v=20260820s"></script>
 </body>
 </html>

@@ -15,7 +15,7 @@ from wallpaper_studio.demo_site import demo_router
 from wallpaper_studio.jobs import run_job
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.storage import load_config, save_config, source_dir, output_dir
-from wallpaper_studio.files import list_images
+from wallpaper_studio.files import empty_source_message, list_images
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
 from wallpaper_studio.sites import SITE_PRESETS
 from wallpaper_studio.paths import archive_temp_warning, web_dir
@@ -89,10 +89,14 @@ def create_app() -> FastAPI:
         payload = state.snapshot()
         payload["config"] = config.model_dump()
         payload["presets"] = {name: profile.model_dump() for name, profile in SITE_PRESETS.items()}
-        payload["source_count"] = len(list_images(source_dir(config)))
+        src = source_dir(config)
+        images = list_images(src)
+        payload["source_count"] = len(images)
         payload["output_count"] = len(list_images(output_dir(config)))
-        payload["source_dir"] = str(source_dir(config))
+        payload["source_dir"] = str(src)
         payload["output_dir"] = str(output_dir(config))
+        payload["source_note"] = "" if images else empty_source_message(src)
+        payload["source_samples"] = [path.name for path in images[:8]]
         try:
             payload["proxy_assignments"] = preview_proxy_assignments(config.accounts, config.network)
             payload["proxy_error"] = None

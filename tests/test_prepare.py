@@ -49,3 +49,16 @@ def test_prepare_skips_title_api_for_image_models(studio_home, monkeypatch):
     prepared = prepare_images(config, logs.append)
     assert prepared[0].name.startswith("night")
     assert any("不能写标题" in line for line in logs)
+
+
+def test_prepare_reads_nested_source_image(studio_home):
+    config = AppConfig(
+        mode="upload_only",
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(studio_home / "source" / "batch1" / "night.png")
+    prepared = prepare_images(config)
+    assert len(prepared) == 1
+    assert prepared[0].exists()

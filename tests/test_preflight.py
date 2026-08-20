@@ -11,6 +11,7 @@ def test_start_problems_reports_missing_source_images(studio_home):
     )
     problems = start_problems(config)
     assert any("没有图片" in item for item in problems)
+    assert any("source" in item for item in problems)
     text = format_start_problems(problems)
     assert "没有图片" in text
 
