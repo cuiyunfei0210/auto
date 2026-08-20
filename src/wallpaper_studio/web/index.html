@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>壁纸工坊 · Wallpaper Studio</title>
+  <link rel="icon" href="/static/favicon.svg"/>
+  <link rel="stylesheet" href="/static/studio.css"/>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <span class="mark"></span>
+        <div>
+          <strong>壁纸工坊</strong>
+          <small>二创 · 顺序上传</small>
+        </div>
+      </div>
+      <nav>
+        <button data-pane="job" class="active">任务</button>
+        <button data-pane="folders">文件夹</button>
+        <button data-pane="accounts">账号</button>
+        <button data-pane="site">网页上传</button>
+        <button data-pane="api">二创 API</button>
+      </nav>
+      <p class="aside-note">一次只开一个窗口。一个账号传完，再登录下一个。</p>
+    </aside>
+    <main>
+      <header class="top">
+        <div>
+          <h1 id="heading">任务</h1>
+          <p id="subheading">先准备图片，再按账号队列模拟网页上传。</p>
+        </div>
+        <div class="status-pill" id="status-pill">空闲</div>
+      </header>
+
+      <section class="pane" id="pane-job">
+        <div class="grid two">
+          <article class="card">
+            <h2>本轮怎么跑</h2>
+            <label class="choice">
+              <input type="radio" name="mode" value="upload_only" checked>
+              <span>跳过二创，直接上传源文件夹</span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="mode" value="remix_then_upload">
+              <span>先调用中转站二创，再上传结果文件夹</span>
+            </label>
+            <div class="stats">
+              <div><em id="source-count">0</em><span>源图</span></div>
+              <div><em id="output-count">0</em><span>待上传</span></div>
+              <div><em id="account-count">0</em><span>账号</span></div>
+            </div>
+            <div class="actions">
+              <button class="primary" id="btn-start">开始任务</button>
+              <button class="ghost" id="btn-stop">停止</button>
+              <button class="ghost" id="btn-save">保存设置</button>
+            </div>
+            <p class="hint" id="path-hint"></p>
+          </article>
+          <article class="card log-card">
+            <h2>运行日志</h2>
+            <pre id="log" class="log"></pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="pane hidden" id="pane-folders">
+        <article class="card">
+          <h2>图片目录</h2>
+          <label>源文件夹（原图）<input id="source_dir" placeholder="例如 D:\wallpapers\source"></label>
+          <label>输出文件夹（二创结果 / 待上传）<input id="output_dir" placeholder="例如 D:\wallpapers\output"></label>
+          <p class="hint">留空则使用程序目录下的 data/source 和 data/output。跳过二创时，也会把源图拷到输出目录并可用 API 生成标题。</p>
+        </article>
+      </section>
+
+      <section class="pane hidden" id="pane-accounts">
+        <article class="card">
+          <div class="row-between">
+            <h2>账号队列</h2>
+            <button class="ghost" id="btn-add-account">添加账号</button>
+          </div>
+          <p class="hint">按列表顺序登录。当前账号的「上传数量」用完后，自动退出并登录下一个账号。</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>账号</th>
+                  <th>密码</th>
+                  <th>上传数量</th>
+                  <th>间隔秒</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="account-rows"></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="card">
+          <h2>代理（可选）</h2>
+          <label class="choice">
+            <input type="checkbox" id="proxy_enabled">
+            <span>启用代理；不勾选时直连，不影响上传</span>
+          </label>
+          <label>每几个账号换一次代理
+            <input id="rotate_every_accounts" type="number" min="1" value="5">
+          </label>
+          <label>代理列表，一行一个，例如 http://127.0.0.1:7890
+            <textarea id="proxies" rows="4"></textarea>
+          </label>
+        </article>
+      </section>
+
+      <section class="pane hidden" id="pane-site">
+        <article class="card">
+          <h2>模拟网页上传</h2>
+          <p class="hint">程序用 Chromium 打开登录页、填表、选文件、点发布。默认指向本机示例站，你改成真实壁纸站的地址和选择器即可。</p>
+          <div class="grid two">
+            <label>登录页 URL<input id="login_url"></label>
+            <label>上传页 URL<input id="upload_url"></label>
+            <label>账号输入框选择器<input id="username_selector"></label>
+            <label>密码输入框选择器<input id="password_selector"></label>
+            <label>登录按钮选择器<input id="login_button_selector"></label>
+            <label>文件选择框选择器<input id="file_input_selector"></label>
+            <label>标题输入框选择器<input id="title_selector"></label>
+            <label>分类选择器<input id="category_selector"></label>
+            <label>默认分类<input id="category_value"></label>
+            <label>发布按钮选择器<input id="submit_selector"></label>
+            <label>成功提示文字<input id="success_text"></label>
+            <label class="choice">
+              <input type="checkbox" id="headless">
+              <span>后台运行浏览器（不弹出窗口）</span>
+            </label>
+          </div>
+          <p class="hint">示例站：<a href="/demo/login" target="_blank">/demo/login</a> · 账号 demo1 / demo2 / demo3，密码 123123</p>
+        </article>
+      </section>
+
+      <section class="pane hidden" id="pane-api">
+        <article class="card">
+          <h2>中转站 API</h2>
+          <label>接口地址<input id="base_url"></label>
+          <label>API Key<input id="api_key" type="password" placeholder="sk-…"></label>
+          <label>二创模型<input id="remix_model"></label>
+          <label>文件名模型<input id="filename_model"></label>
+          <label>二创提示词<textarea id="remix_prompt" rows="3"></textarea></label>
+          <label>文件名提示词（生成上传标题）<textarea id="filename_prompt" rows="3"></textarea></label>
+          <label>出图尺寸<input id="image_size"></label>
+          <p class="hint">Key 只保存在本机 data/config.json，不会写进代码仓库。中转站生图通道异常时，请改用「跳过二创」。</p>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/static/studio.js"></script>
+</body>
+</html>
