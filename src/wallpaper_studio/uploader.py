@@ -72,7 +72,7 @@ class BrowserUploader:
             self.site.navigation_timeout_ms,
         )
         if self.site.login_success_text:
-            await self._page.get_by_text(self.site.login_success_text, exact=False).first.wait_for()
+            await self._page.get_by_text(self.site.login_success_text, exact=True).first.wait_for()
         else:
             await self._page.wait_for_load_state("domcontentloaded")
             error = self._page.locator(".error")
@@ -94,9 +94,14 @@ class BrowserUploader:
             )
             if self.site.title_selector:
                 await page.locator(self.site.title_selector).first.wait_for(state="visible")
-        await page.locator(self.site.file_input_selector).first.set_input_files(str(image))
-        if self.site.file_uploaded_text:
-            await page.get_by_text(self.site.file_uploaded_text, exact=False).first.wait_for()
+        file_locator = page.locator(self.site.file_input_selector)
+        if await file_locator.count() == 0:
+            file_locator = page.locator(
+                "#ID-upload-demo-drag input[type=file], input.layui-upload-file"
+            )
+        await file_locator.first.set_input_files(str(image))
+        self.log(f"正在把图片传到网站：{image.name}")
+        await _wait_file_accepted(page, self.site)
         if self.site.title_selector:
             await page.locator(self.site.title_selector).first.fill(title)
         raw_category = category or self.site.category_value
@@ -163,20 +168,93 @@ async def _check_agreements(page, selector: str) -> None:
             await nearby.click()
 
 
+async def _visible_layer_messages(page) -> list[str]:
+    return await page.evaluate(
+        """() => Array.from(document.querySelectorAll('.layui-layer-msg, .layui-layer-dialog'))
+            .filter((el) => {
+                const st = getComputedStyle(el);
+                if (st.display === 'none' || st.visibility === 'hidden') return false;
+                const box = el.getBoundingClientRect();
+                return box.width > 0 && box.height > 0;
+            })
+            .map((el) => (el.innerText || '').trim())
+            .filter(Boolean)"""
+    )
+
+
+def _is_failure_text(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(token in lowered for token in ["fail", "error", "please", "失败", "错误"])
+
+
+async def _wait_file_accepted(page, site: SiteProfile) -> None:
+    """Wait until the wallpaper file actually reached the site.
+
+    CQwall's legal copy contains a hidden paragraph starting with "Uploaded",
+    so a substring text wait never becomes visible. Prefer the hidden image
+    path field, and only treat an exact visible toast as success.
+    """
+    timeout = site.navigation_timeout_ms
+    expected = (site.file_uploaded_text or "").strip()
+    has_image_field = await page.locator("#wallImage").count()
+    if not has_image_field and not expected:
+        return
+    try:
+        result = await page.wait_for_function(
+            """expected => {
+                const value = document.querySelector('#wallImage')?.value;
+                if (value) return {ok: true};
+                const nodes = Array.from(document.querySelectorAll(
+                    '.layui-layer-msg, .layui-layer-dialog'
+                ));
+                const visible = nodes.filter((el) => {
+                    const st = getComputedStyle(el);
+                    if (st.display === 'none' || st.visibility === 'hidden') return false;
+                    const box = el.getBoundingClientRect();
+                    return box.width > 0 && box.height > 0;
+                });
+                const textOf = (el) => (el.innerText || '').trim();
+                const fail = visible.find((el) => /fail|error|失败|错误/i.test(textOf(el)));
+                if (fail) return {ok: false, error: textOf(fail)};
+                if (expected && visible.some((el) => textOf(el) === expected)) {
+                    return {ok: true};
+                }
+                return false;
+            }""",
+            arg=expected,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        messages = await _visible_layer_messages(page)
+        fail = next((item for item in messages if _is_failure_text(item)), None)
+        if fail:
+            raise RuntimeError(f"图片未上传成功：{fail}") from exc
+        raise RuntimeError(
+            "图片没有传到网站。CQwall 要求不少于 1920×1080，且必须在创作者中心上传。"
+            f" 原始错误：{exc}"
+        ) from exc
+    payload = await result.json_value()
+    if isinstance(payload, dict) and payload.get("ok") is False:
+        raise RuntimeError(f"图片未上传成功：{payload.get('error') or 'Upload failed'}")
+
+
 async def _wait_upload_result(page, site: SiteProfile) -> None:
     if site.success_text:
-        await page.get_by_text(site.success_text, exact=False).first.wait_for(
-            timeout=site.navigation_timeout_ms
+        await page.get_by_text(site.success_text, exact=True).first.wait_for(
+            state="visible",
+            timeout=site.navigation_timeout_ms,
         )
         return
-    msg = page.locator(".layui-layer-msg, .layui-layer-dialog").last
     try:
-        await msg.wait_for(timeout=site.navigation_timeout_ms)
-        text = (await msg.inner_text()).strip()
+        await page.locator(".layui-layer-msg, .layui-layer-dialog").last.wait_for(
+            state="visible",
+            timeout=site.navigation_timeout_ms,
+        )
     except Exception:
         return
-    lowered = text.lower()
-    if any(token in lowered for token in ["fail", "error", "please", "失败", "错误"]):
+    messages = await _visible_layer_messages(page)
+    text = messages[-1] if messages else ""
+    if _is_failure_text(text):
         raise RuntimeError(f"上传未成功：{text}")
 
 

@@ -69,7 +69,7 @@ def cqwall_site() -> SiteProfile:
         login_success_text="Login successful",
         logged_in_selector=".logged_in",
         open_upload_selector='a[lay-on="page-upload"]',
-        file_input_selector="input.layui-upload-file",
+        file_input_selector="#ID-upload-demo-drag input[type=file]",
         file_uploaded_text="Uploaded",
         title_selector='#layer-upload input[name="title"]',
         category_selector='#layer-upload select[name="category"]',

@@ -18,6 +18,8 @@ def test_cqwall_preset_points_at_live_site():
     assert site.login_url == "https://www.cqwall.com/"
     assert site.upload_url.endswith("/index/index/center.html")
     assert site.open_login_selector == '.header .login a[lay-on="page-login"]'
+    assert site.file_input_selector == "#ID-upload-demo-drag input[type=file]"
+    assert site.file_uploaded_text == "Uploaded"
     assert site.min_width == 0
     assert site.min_height == 0
 
