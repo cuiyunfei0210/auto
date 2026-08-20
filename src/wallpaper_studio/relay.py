@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import mimetypes
 import re
+import time
 from pathlib import Path
 
 import httpx
@@ -34,6 +35,12 @@ def friendly_error_message(raw: str) -> str:
         return (
             "当前接口走的是 xbhuiz 线路，不能生图。请把接口地址改成 https://xmapi.site （不要带 /v1），"
             "API Key 用中转站后台给的 sk-，生图模型填 gpt-image-2。"
+        )
+    if "temporarily unavailable" in lowered or "upstream service" in lowered or "upstream_error" in lowered:
+        return (
+            "中转站上游生图暂时不可用（Upstream service temporarily unavailable）。"
+            "这是 xmapi 后面的模型线路抖动，不是图片或账号填错。"
+            "程序会自动重试几次；若仍然失败，等一两分钟再跑，或先改用「跳过二创」。"
         )
     if "batch_image_disabled" in lowered or "batch image" in lowered:
         return (
@@ -105,6 +112,24 @@ def chat_model_supports_titles(model: str) -> bool:
     return not any(token in name for token in markers)
 
 
+def is_transient_relay_error(text: str) -> bool:
+    lowered = (text or "").lower()
+    tokens = (
+        "temporarily unavailable",
+        "upstream service",
+        "upstream_error",
+        "overloaded",
+        "bad gateway",
+        "gateway timeout",
+        "timed out",
+        "service unavailable",
+        "502",
+        "503",
+        "504",
+    )
+    return any(token in lowered for token in tokens)
+
+
 def official_image_size(value: str) -> str:
     text = (value or "").strip() or "1024x1024"
     key = text.lower().replace(" ", "").replace("×", "x")
@@ -150,17 +175,38 @@ class RelayClient:
             or "gpt-image-2"
         )
 
-    def _post_json(self, path: str, payload: dict, timeout: float | None = None) -> dict:
+    def _post_json(
+        self,
+        path: str,
+        payload: dict,
+        timeout: float | None = None,
+        retries: int = 0,
+    ) -> dict:
         kwargs: dict = {"timeout": self.timeout if timeout is None else timeout}
         if self.transport is not None:
             kwargs["transport"] = self.transport
-        with httpx.Client(**kwargs) as client:
-            response = client.post(
-                self._url(path),
-                headers=self._headers(),
-                json=payload,
-            )
-        return _json_or_error(response)
+        last_error: Exception | None = None
+        attempts = max(1, retries + 1)
+        for attempt in range(attempts):
+            try:
+                with httpx.Client(**kwargs) as client:
+                    response = client.post(
+                        self._url(path),
+                        headers=self._headers(),
+                        json=payload,
+                    )
+                return _json_or_error(response)
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last_error = ApiError(f"中转站网络超时或中断：{exc}")
+            except ApiError as exc:
+                last_error = exc
+                if not is_transient_relay_error(str(exc)):
+                    raise
+            if attempt + 1 >= attempts:
+                break
+            time.sleep(2 * (attempt + 1))
+        assert last_error is not None
+        raise last_error
 
     def generate_title(self, original_stem: str) -> str:
         if not chat_model_supports_titles(self.settings.filename_model):
@@ -197,7 +243,7 @@ class RelayClient:
         errors: list[str] = []
         for path, payload in self._remix_requests(data_url, mime):
             try:
-                data = self._post_json(path, payload)
+                data = self._post_json(path, payload, retries=3)
                 image_bytes, suffix = extract_image_payload(data, source.suffix)
             except ApiError as exc:
                 errors.append(f"{path}: {exc}")

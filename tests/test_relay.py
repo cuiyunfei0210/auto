@@ -30,6 +30,13 @@ def test_friendly_message_for_xbhuiz_image_line():
     assert "gpt-image-2" in text
 
 
+def test_friendly_message_for_upstream_unavailable():
+    text = friendly_error_message("Upstream service temporarily unavailable")
+    assert "暂时不可用" in text
+    assert "跳过二创" in text
+    assert friendly_error_message(text) == text
+
+
 def test_friendly_message_for_batch_image_disabled():
     text = friendly_error_message("BATCH_IMAGE_DISABLED")
     assert "跳过二创" in text
@@ -79,6 +86,30 @@ def test_remix_image_model_uses_clean_edits_endpoint(tmp_path: Path):
     assert dest.exists()
     assert dest.read_bytes() == source.read_bytes()
     assert seen == ["/v1/images/edits"]
+
+
+def test_remix_retries_transient_upstream_errors(tmp_path: Path, monkeypatch):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    calls = {"n": 0}
+    monkeypatch.setattr("wallpaper_studio.relay.time.sleep", lambda _seconds: None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(
+                502,
+                json={"error": {"message": "Upstream service temporarily unavailable"}},
+            )
+        return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert calls["n"] == 2
 
 
 def test_remix_chat_model_tries_responses_first(tmp_path: Path):

@@ -156,7 +156,7 @@ async def _run(config: AppConfig) -> None:
         await state.emit("任务已停止")
         raise
     except Exception as exc:  # noqa: BLE001
-        message = friendly_error_message(str(exc))
+        message = friendly_error_message(str(exc)).lstrip(": ").strip()
         state.last_error = message
         await state.emit(f"任务失败：{message}")
     finally:
