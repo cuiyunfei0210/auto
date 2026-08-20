@@ -1,6 +1,7 @@
 from pathlib import Path
+import json
 
-from wallpaper_studio.models import AppConfig, PathSettings
+from wallpaper_studio.models import DEFAULT_REMIX_PROMPT, AppConfig, PathSettings
 from wallpaper_studio.storage import (
     is_foreign_user_path,
     load_config,
@@ -51,3 +52,20 @@ def test_load_config_recovers_from_corrupt_json(studio_home):
     assert config.accounts
     assert (studio_home / "config.bad.json").exists()
     assert (studio_home / "config.json").exists()
+
+
+def test_load_config_fills_blank_remix_prompt(studio_home):
+    path = studio_home / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "api": {"remix_prompt": ""},
+                "accounts": [{"username": "demo@cqwall.com", "password": "123123"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_config()
+    assert config.api.remix_prompt == DEFAULT_REMIX_PROMPT
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["api"]["remix_prompt"] == DEFAULT_REMIX_PROMPT

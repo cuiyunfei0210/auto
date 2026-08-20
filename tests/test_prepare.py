@@ -83,8 +83,10 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
         return path
 
     monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
-    prepared = prepare_images(config, progress=lambda left, total: ticks.append((left, total)))
+    logs: list[str] = []
+    prepared = prepare_images(config, logs.append, progress=lambda left, total: ticks.append((left, total)))
     assert len(prepared) == 2
     assert ticks[0] == (2, 2)
     assert ticks[1] == (1, 2)
     assert ticks[2] == (0, 2)
+    assert any("不会原样照搬" in line for line in logs)

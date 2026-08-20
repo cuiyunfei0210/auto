@@ -4,7 +4,7 @@ from pathlib import Path
 
 import httpx
 
-from wallpaper_studio.models import ApiSettings
+from wallpaper_studio.models import DEFAULT_REMIX_PROMPT, ApiSettings
 from wallpaper_studio.relay import (
     RelayClient,
     chat_model_supports_titles,
@@ -207,3 +207,15 @@ def test_image_models_are_not_used_for_chat_titles():
     assert chat_model_supports_titles("gpt-4o-mini")
     assert not chat_model_supports_titles("gpt-image-2")
     assert not chat_model_supports_titles("")
+
+
+def test_empty_remix_prompt_sends_strong_restyle_instruction():
+    settings = ApiSettings(remix_prompt="")
+    assert settings.remix_prompt == DEFAULT_REMIX_PROMPT
+    settings.remix_prompt = "   "
+    client = RelayClient(settings)
+    path, payload = client._remix_requests("data:image/png;base64,xx", "image/png")[0]
+    assert path == "/v1/images/edits"
+    assert "禁止原样" in payload["prompt"]
+    assert "near-identical" in payload["prompt"]
+    assert "Restyle this image as a desktop wallpaper." not in payload["prompt"]

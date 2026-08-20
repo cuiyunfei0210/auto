@@ -73,6 +73,18 @@ def test_empty_accounts_are_restored_to_default(studio_home):
     assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
 
 
+def test_blank_remix_prompt_is_saved_as_default(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["api"]["remix_prompt"] = ""
+    saved = client.post("/api/config", json=payload)
+    assert saved.status_code == 200
+    prompt = saved.json()["config"]["api"]["remix_prompt"]
+    assert "禁止原样" in prompt
+    assert client.get("/api/state").json()["config"]["api"]["remix_prompt"] == prompt
+
+
 def test_default_state_includes_cqwall_and_xbhuiz(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())

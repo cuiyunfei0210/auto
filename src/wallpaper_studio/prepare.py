@@ -50,6 +50,8 @@ def prepare_images(
     total = remaining
     if progress:
         progress(remaining, total)
+    if config.mode == "remix_then_upload":
+        emit("二创会按提示词重绘样板；提示词留空时自动用默认改图词，不会原样照搬。")
 
     for image in images:
         title = image.stem

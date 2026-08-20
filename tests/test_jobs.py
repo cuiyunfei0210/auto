@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from wallpaper_studio.jobs import run_job
-from wallpaper_studio.models import Account, AppConfig, NetworkSettings, PathSettings, SiteProfile, apply_builtin_defaults
+from wallpaper_studio.models import DEFAULT_REMIX_PROMPT, Account, AppConfig, NetworkSettings, PathSettings, SiteProfile, apply_builtin_defaults, effective_remix_prompt
 from wallpaper_studio.storage import save_config, source_dir
 from tests.helpers import make_png
 
@@ -153,3 +153,27 @@ def test_apply_defaults_switches_xbhuiz_to_xmapi():
     updated = apply_builtin_defaults(config)
     assert updated.api.base_url == "https://xmapi.site"
     assert updated.api.api_key.startswith("sk-")
+
+
+def test_blank_remix_prompt_becomes_restyle_default():
+    settings = AppConfig.model_validate({"api": {"remix_prompt": "  "}}).api
+    assert settings.remix_prompt == DEFAULT_REMIX_PROMPT
+    assert "禁止原样" in settings.remix_prompt
+    assert effective_remix_prompt("") == DEFAULT_REMIX_PROMPT
+    assert effective_remix_prompt("Restyle this image as a desktop wallpaper.") == DEFAULT_REMIX_PROMPT
+    custom = "把山改成雪景，光线更冷。"
+    assert effective_remix_prompt(custom) == custom
+
+
+def test_apply_defaults_upgrades_weak_remix_prompt():
+    config = AppConfig.model_validate(
+        {
+            "api": {
+                "remix_prompt": "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details."
+            }
+        }
+    )
+    # assignment can bypass the validator after construction
+    config.api.remix_prompt = "Restyle this image as a desktop wallpaper."
+    updated = apply_builtin_defaults(config)
+    assert updated.api.remix_prompt == DEFAULT_REMIX_PROMPT

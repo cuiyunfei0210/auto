@@ -4,6 +4,29 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
+DEFAULT_REMIX_PROMPT = (
+    "把这张参考图做成一张全新的高质量桌面壁纸。"
+    "保留主体和构图，但必须明显改变光线、色调、材质、细节和氛围，"
+    "禁止原样复制或输出几乎不变的图。"
+    "电影级光影，锐利细节，没有水印和文字。 "
+    "Create a brand-new high-quality desktop wallpaper from this reference image. "
+    "Keep the same subject and composition, but you MUST clearly change lighting, "
+    "color grade, textures, details, and atmosphere. Do not copy the original pixels "
+    "or return a near-identical image. Cinematic lighting, sharp details, no watermarks or text."
+)
+_WEAK_REMIX_PROMPTS = {
+    "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details.",
+    "Restyle this image as a desktop wallpaper.",
+}
+
+
+def effective_remix_prompt(value: str | None) -> str:
+    """Blank or leftover weak prompts must restyle, not copy the template."""
+    text = (value or "").strip()
+    if not text or text in _WEAK_REMIX_PROMPTS:
+        return DEFAULT_REMIX_PROMPT
+    return text
+
 
 class ApiSettings(BaseModel):
     base_url: str = "https://xmapi.site"
@@ -13,9 +36,18 @@ class ApiSettings(BaseModel):
     remix_model: str = "gpt-image-2"
     remix_chat_model: str = "gpt-image-2"
     filename_model: str = "gpt-image-2"
-    remix_prompt: str = "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details."
+    remix_prompt: str = DEFAULT_REMIX_PROMPT
     filename_prompt: str = "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes."
     image_size: str = "1K"
+
+    @field_validator("remix_prompt", mode="before")
+    @classmethod
+    def fill_blank_remix_prompt(cls, value: object) -> object:
+        if value is None:
+            return DEFAULT_REMIX_PROMPT
+        if isinstance(value, str):
+            return effective_remix_prompt(value)
+        return value
 
 
 class PathSettings(BaseModel):
@@ -150,6 +182,10 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
         api["username"] = "596003517@qq.com"
         if not str(api.get("password") or "").strip():
             api["password"] = "123123"
+        changed = True
+    prompt = effective_remix_prompt(str(api.get("remix_prompt") or ""))
+    if prompt != str(api.get("remix_prompt") or ""):
+        api["remix_prompt"] = prompt
         changed = True
     if not changed:
         return config

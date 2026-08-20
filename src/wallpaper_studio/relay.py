@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 
 from wallpaper_studio.files import sanitize_filename, unique_path
-from wallpaper_studio.models import ApiSettings
+from wallpaper_studio.models import ApiSettings, effective_remix_prompt
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 _DATA_URL = re.compile(r"^data:image/([^;]+);base64,(.+)$", re.DOTALL | re.IGNORECASE)
@@ -262,11 +262,10 @@ class RelayClient:
         raise ApiError(friendly_error_message(combined))
 
     def _remix_requests(self, data_url: str, mime: str) -> list[tuple[str, dict]]:
-        prompt = self.settings.remix_prompt.strip() or "Restyle this image as a desktop wallpaper."
         prompt = (
-            "You must generate an edited wallpaper image from the reference photo. "
-            "Do not reply with text only.\n"
-            + prompt
+            "You must generate a newly edited wallpaper from the reference photo. "
+            "Do not reply with text only, and do not return the original image unchanged.\n"
+            + effective_remix_prompt(self.settings.remix_prompt)
         )
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"

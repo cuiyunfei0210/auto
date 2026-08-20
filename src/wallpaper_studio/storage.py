@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from wallpaper_studio.models import AppConfig, apply_builtin_defaults
+from wallpaper_studio.models import AppConfig, apply_builtin_defaults, effective_remix_prompt
 from wallpaper_studio.paths import app_root
 
 DEFAULT_PORT = 8765
@@ -132,7 +132,10 @@ def load_config() -> AppConfig:
         loaded = AppConfig.model_validate(payload)
         config = apply_builtin_defaults(loaded)
         config = sanitize_portable_paths(config)
-        if config.model_dump() != loaded.model_dump():
+        raw_prompt = ""
+        if isinstance(payload, dict):
+            raw_prompt = str((payload.get("api") or {}).get("remix_prompt") or "")
+        if config.model_dump() != loaded.model_dump() or effective_remix_prompt(raw_prompt) != raw_prompt:
             _try_save(config)
         return config
     except (OSError, json.JSONDecodeError, UnicodeError, ValidationError, ValueError):
