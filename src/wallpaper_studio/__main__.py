@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 import webbrowser
 from pathlib import Path
-import sys
 
 # Allow `python -m wallpaper_studio` from a source checkout.
-ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "src"
-if (SRC / "wallpaper_studio").exists() and str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+if not getattr(sys, "frozen", False):
+    ROOT = Path(__file__).resolve().parents[2]
+    SRC = ROOT / "src"
+    if (SRC / "wallpaper_studio").exists() and str(SRC) not in sys.path:
+        sys.path.insert(0, str(SRC))
 
 
 def main() -> None:
@@ -21,7 +23,10 @@ def main() -> None:
     args = parser.parse_args()
 
     from wallpaper_studio.instance_lock import InstanceLock, InstanceLockError
+    from wallpaper_studio.paths import app_root
     from wallpaper_studio.storage import load_config
+
+    os.chdir(app_root())
 
     if args.once:
         import asyncio
@@ -37,18 +42,30 @@ def main() -> None:
         lock.acquire()
     except InstanceLockError as exc:
         print(exc)
+        _pause_if_windows()
         sys.exit(1)
 
     try:
         import uvicorn
         from wallpaper_studio.server import app
 
+        url = f"http://{args.host}:{args.port}"
+        print()
+        print("=" * 48)
+        print("  壁纸工坊已启动（请不要关闭这个窗口）")
+        print(f"  界面地址：{url}")
+        print("=" * 48)
+        print()
         if not args.no_browser:
-            url = f"http://{args.host}:{args.port}"
             webbrowser.open(url)
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     finally:
         lock.release()
+
+
+def _pause_if_windows() -> None:
+    if os.name == "nt" and sys.stdin.isatty():
+        input("按回车键退出…")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,20 @@
 本地小工具：对文件夹里的图片做二创（可选），然后用浏览器**模拟网页上传**。  
 **一个账号的数量传完，才登录下一个账号。** 同一台电脑只能开一份。
 
+## Windows 怎么打开
+
+电脑上先安装 [Python 3.11+](https://www.python.org/downloads/windows/)，安装时勾选 **Add python.exe to PATH**。
+
+然后**双击**下面任意一个文件：
+
+- `打开壁纸工坊.bat`
+- `start.bat`
+
+第一次会自动创建环境、安装组件和 Chromium。装完后浏览器会打开 `http://127.0.0.1:8765`。  
+**用完之前不要关掉那个黑色命令行窗口**，关掉就等于退出程序。
+
+也可以自己打包成 exe：双击 `build-windows.bat`，生成 `dist\WallpaperStudio\WallpaperStudio.exe`。
+
 ## 能做什么
 
 - 跳过二创，直接选本地文件夹上传
@@ -12,22 +26,17 @@
 - 代理可选。默认 **一个账号一个出口 IP**，代理不够或两个账号填了同一个代理时会拒绝开跑；关掉代理也能正常上传
 - 自带示例壁纸站，方便先把流程跑通
 
-## 安装（Windows）
+## 安装（手动，可选）
+
+如果双击 bat 失败，可在项目目录打开命令行：
 
 ```bat
-python -m venv .venv
+py -3 -m venv .venv
 .venv\Scripts\activate
 pip install -e .
 playwright install chromium
-```
-
-启动：
-
-```bat
 python run.py
 ```
-
-或双击 `start.bat`。浏览器会打开 `http://127.0.0.1:8765`。
 
 ## 建议的试用步骤
 

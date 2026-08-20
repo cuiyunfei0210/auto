@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from wallpaper_studio.models import AppConfig
+from wallpaper_studio.paths import app_root
 
 DEFAULT_PORT = 8765
 CONFIG_FILENAME = "config.json"
@@ -15,7 +16,7 @@ def data_dir() -> Path:
     if raw:
         path = Path(raw).expanduser()
     else:
-        path = Path.cwd() / "data"
+        path = app_root() / "data"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

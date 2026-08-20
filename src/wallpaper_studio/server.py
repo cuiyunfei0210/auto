@@ -18,8 +18,9 @@ from wallpaper_studio.storage import load_config, save_config, source_dir, outpu
 from wallpaper_studio.files import list_images
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
 from wallpaper_studio.sites import SITE_PRESETS
+from wallpaper_studio.paths import web_dir
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
+WEB_DIR = web_dir()
 
 
 class StudioState:
