@@ -23,19 +23,27 @@ class PathSettings(BaseModel):
 class SiteProfile(BaseModel):
     """CSS selectors for a wallpaper site login + upload form."""
 
-    login_url: str = "http://127.0.0.1:8765/demo/login"
-    upload_url: str = "http://127.0.0.1:8765/demo/upload"
-    username_selector: str = "#username"
-    password_selector: str = "#password"
-    login_button_selector: str = "button[type=submit]"
+    login_url: str = "https://www.cqwall.com/"
+    upload_url: str = "https://www.cqwall.com/index/index/center.html"
+    open_login_selector: str = ""
+    username_selector: str = '#layer-user input[name="email"]'
+    password_selector: str = '#layer-user input[name="password"]'
+    login_button_selector: str = '#layer-user button[lay-filter="login"]'
+    login_success_text: str = ""
+    logged_in_selector: str = ""
+    open_upload_selector: str = ""
     file_input_selector: str = "input[type=file]"
-    title_selector: str = "#title"
-    category_selector: str = "#category"
-    category_value: str = "风景"
-    submit_selector: str = "#submit-upload"
-    success_text: str = "上传成功"
+    file_uploaded_text: str = ""
+    title_selector: str = '#layer-upload input[name="title"]'
+    category_selector: str = '#layer-upload select[name="category"]'
+    category_value: str = "9"
+    agree_selector: str = ""
+    submit_selector: str = '#layer-upload button[lay-filter="wallpaper"]'
+    success_text: str = ""
+    min_width: int = 0
+    min_height: int = 0
     headless: bool = True
-    navigation_timeout_ms: int = 30000
+    navigation_timeout_ms: int = 45000
 
 
 class Account(BaseModel):
@@ -69,17 +77,18 @@ class NetworkSettings(BaseModel):
     proxies: list[str] = Field(default_factory=list)
 
 
+def default_site_profile() -> SiteProfile:
+    from wallpaper_studio.sites import cqwall_site
+
+    return cqwall_site()
+
+
 class AppConfig(BaseModel):
     mode: str = "upload_only"  # upload_only | remix_then_upload
     api: ApiSettings = Field(default_factory=ApiSettings)
     paths: PathSettings = Field(default_factory=PathSettings)
-    site: SiteProfile = Field(default_factory=SiteProfile)
-    accounts: list[Account] = Field(
-        default_factory=lambda: [
-            Account(username="demo1", password="123123", upload_count=2, interval_seconds=2),
-            Account(username="demo2", password="123123", upload_count=2, interval_seconds=2),
-        ]
-    )
+    site: SiteProfile = Field(default_factory=default_site_profile)
+    accounts: list[Account] = Field(default_factory=list)
     network: NetworkSettings = Field(default_factory=NetworkSettings)
 
     @field_validator("mode")

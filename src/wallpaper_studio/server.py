@@ -17,6 +17,7 @@ from wallpaper_studio.models import AppConfig
 from wallpaper_studio.storage import load_config, save_config, source_dir, output_dir
 from wallpaper_studio.files import list_images
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
+from wallpaper_studio.sites import SITE_PRESETS
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
         config = load_config()
         payload = state.snapshot()
         payload["config"] = config.model_dump()
+        payload["presets"] = {name: profile.model_dump() for name, profile in SITE_PRESETS.items()}
         payload["source_count"] = len(list_images(source_dir(config)))
         payload["output_count"] = len(list_images(output_dir(config)))
         payload["source_dir"] = str(source_dir(config))

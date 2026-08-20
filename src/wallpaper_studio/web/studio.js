@@ -7,10 +7,12 @@ const headings = {
 };
 
 const siteFields = [
-  "login_url", "upload_url", "username_selector", "password_selector",
-  "login_button_selector", "file_input_selector", "title_selector",
-  "category_selector", "category_value", "submit_selector", "success_text",
+  "login_url", "upload_url", "open_login_selector", "username_selector", "password_selector",
+  "login_button_selector", "login_success_text", "logged_in_selector", "open_upload_selector",
+  "file_input_selector", "file_uploaded_text", "title_selector",
+  "category_selector", "category_value", "agree_selector", "submit_selector", "success_text",
 ];
+const siteNumbers = ["min_width", "min_height"];
 
 const apiFields = ["base_url", "api_key", "remix_model", "filename_model", "remix_prompt", "filename_prompt", "image_size"];
 
@@ -45,6 +47,7 @@ function collectConfig() {
 
   const site = {};
   for (const key of siteFields) site[key] = $(key).value;
+  for (const key of siteNumbers) site[key] = Number($(key).value || 0);
   site.headless = $("headless").checked;
 
   const api = {};
@@ -73,7 +76,11 @@ function applyConfig(config) {
   $("source_dir").value = config.paths.source_dir || "";
   $("output_dir").value = config.paths.output_dir || "";
   for (const key of siteFields) $(key).value = config.site[key] ?? "";
+  for (const key of siteNumbers) $(key).value = config.site[key] ?? 0;
   $("headless").checked = Boolean(config.site.headless);
+  if ($("site_preset")) {
+    $("site_preset").value = (config.site.login_url || "").includes("cqwall.com") ? "cqwall" : "demo";
+  }
   for (const key of apiFields) $(key).value = config.api[key] ?? "";
   $("proxy_enabled").checked = Boolean(config.network.proxy_enabled);
   $("unique_ip_per_account").checked = config.network.unique_ip_per_account !== false;
@@ -96,9 +103,12 @@ function renderLogs(lines) {
   $("log").scrollTop = $("log").scrollHeight;
 }
 
+let presets = {};
+
 async function refresh() {
   const res = await fetch("/api/state");
   const data = await res.json();
+  presets = data.presets || presets;
   applyConfig(data.config);
   $("source-count").textContent = data.source_count;
   $("output-count").textContent = data.output_count;
@@ -160,6 +170,16 @@ $("btn-start").onclick = async () => {
 $("btn-stop").onclick = async () => {
   await fetch("/api/stop", { method: "POST" });
 };
+
+if ($("site_preset")) {
+  $("site_preset").onchange = () => {
+    const preset = presets[$("site_preset").value];
+    if (!preset) return;
+    for (const key of siteFields) $(key).value = preset[key] ?? "";
+    for (const key of siteNumbers) $(key).value = preset[key] ?? 0;
+    $("headless").checked = Boolean(preset.headless);
+  };
+}
 
 function connectWs() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);

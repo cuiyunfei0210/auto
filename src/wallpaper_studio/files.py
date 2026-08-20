@@ -38,3 +38,28 @@ def unique_path(directory: Path, stem: str, suffix: str) -> Path:
         candidate = directory / f"{stem}-{index}{suffix}"
         index += 1
     return candidate
+
+
+def image_dimensions(path: Path) -> tuple[int, int]:
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return image.size
+
+
+def filter_by_min_size(
+    images: list[Path],
+    min_width: int,
+    min_height: int,
+) -> tuple[list[Path], list[str]]:
+    if min_width <= 0 and min_height <= 0:
+        return list(images), []
+    kept: list[Path] = []
+    skipped: list[str] = []
+    for path in images:
+        width, height = image_dimensions(path)
+        if width < min_width or height < min_height:
+            skipped.append(f"{path.name}（{width}x{height}）")
+            continue
+        kept.append(path)
+    return kept, skipped

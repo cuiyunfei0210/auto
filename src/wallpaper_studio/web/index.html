@@ -81,7 +81,7 @@
             <h2>账号队列</h2>
             <button class="ghost" id="btn-add-account">添加账号</button>
           </div>
-          <p class="hint">按列表顺序登录。当前账号的「上传数量」用完后，自动退出并登录下一个账号。每个账号应走不同出口，避免多个账号落在同一个 IP。</p>
+          <p class="hint">按列表顺序登录。CQwall 用邮箱当账号。当前账号的数量用完后，自动退出并登录下一个。每个账号应走不同出口，避免多个账号落在同一个 IP。</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -122,25 +122,39 @@
       <section class="pane hidden" id="pane-site">
         <article class="card">
           <h2>模拟网页上传</h2>
-          <p class="hint">程序用 Chromium 打开登录页、填表、选文件、点发布。默认指向本机示例站，你改成真实壁纸站的地址和选择器即可。</p>
+          <p class="hint">默认已对接 CQwall：首页邮箱登录弹层 → 创作中心上传。图片不能小于 1920×1080。账号密码请在「账号」页填写，不要写进代码。</p>
+          <label>站点模板
+            <select id="site_preset">
+              <option value="cqwall">CQwall（www.cqwall.com）</option>
+              <option value="demo">本机示例站</option>
+            </select>
+          </label>
           <div class="grid two">
             <label>登录页 URL<input id="login_url"></label>
             <label>上传页 URL<input id="upload_url"></label>
+            <label>打开登录弹层选择器<input id="open_login_selector"></label>
             <label>账号输入框选择器<input id="username_selector"></label>
             <label>密码输入框选择器<input id="password_selector"></label>
             <label>登录按钮选择器<input id="login_button_selector"></label>
+            <label>登录成功文字<input id="login_success_text"></label>
+            <label>已登录标记选择器<input id="logged_in_selector"></label>
+            <label>打开上传弹层选择器<input id="open_upload_selector"></label>
             <label>文件选择框选择器<input id="file_input_selector"></label>
+            <label>文件上传完成文字<input id="file_uploaded_text"></label>
             <label>标题输入框选择器<input id="title_selector"></label>
             <label>分类选择器<input id="category_selector"></label>
-            <label>默认分类<input id="category_value"></label>
+            <label>默认分类（风景=9）<input id="category_value"></label>
+            <label>协议勾选选择器<input id="agree_selector"></label>
             <label>发布按钮选择器<input id="submit_selector"></label>
             <label>成功提示文字<input id="success_text"></label>
+            <label>最小宽度<input id="min_width" type="number" min="0"></label>
+            <label>最小高度<input id="min_height" type="number" min="0"></label>
             <label class="choice">
               <input type="checkbox" id="headless">
               <span>后台运行浏览器（不弹出窗口）</span>
             </label>
           </div>
-          <p class="hint">示例站：<a href="/demo/login" target="_blank">/demo/login</a> · 账号 demo1 / demo2 / demo3，密码 123123</p>
+          <p class="hint">本机示例站：<a href="/demo/login" target="_blank">/demo/login</a>。CQwall 分类：1 动物 / 9 风景 / 10 动漫 / 17 游戏。</p>
         </article>
       </section>
 

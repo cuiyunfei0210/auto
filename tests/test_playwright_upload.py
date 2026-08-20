@@ -10,7 +10,8 @@ from fastapi.testclient import TestClient
 
 from wallpaper_studio.demo_site import reset_demo_sessions
 from wallpaper_studio.jobs import run_job
-from wallpaper_studio.models import Account, AppConfig, PathSettings, SiteProfile
+from wallpaper_studio.models import Account, AppConfig, PathSettings
+from wallpaper_studio.sites import demo_site
 from wallpaper_studio.server import create_app
 from wallpaper_studio.storage import save_config, source_dir, data_dir
 from tests.helpers import make_png
@@ -59,11 +60,7 @@ async def test_playwright_uploads_then_switches_account(studio_home, live_server
     config = AppConfig(
         mode="upload_only",
         paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
-        site=SiteProfile(
-            login_url=f"{live_server}/demo/login",
-            upload_url=f"{live_server}/demo/upload",
-            headless=True,
-        ),
+        site=demo_site(live_server),
         accounts=[
             Account(username="demo1", password="123123", upload_count=1, interval_seconds=0),
             Account(username="demo2", password="123123", upload_count=1, interval_seconds=0),

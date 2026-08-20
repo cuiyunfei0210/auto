@@ -4,6 +4,7 @@ from collections.abc import Callable, Awaitable
 from pathlib import Path
 
 from wallpaper_studio.models import Account, AccountBatch, SiteProfile
+from wallpaper_studio.sites import map_category
 
 LogFn = Callable[[str], None]
 
@@ -34,15 +35,21 @@ class BrowserUploader:
         self._page = await self._context.new_page()
         self._page.set_default_timeout(self.site.navigation_timeout_ms)
         await self._page.goto(self.site.login_url, wait_until="domcontentloaded")
-        await self._page.fill(self.site.username_selector, account.username)
-        await self._page.fill(self.site.password_selector, account.password)
-        await self._page.click(self.site.login_button_selector)
-        await self._page.wait_for_load_state("domcontentloaded")
-        error = self._page.locator(".error")
-        if await error.count():
-            raise RuntimeError(f"登录失败：{await error.first.inner_text()}")
-        if "login" in (self._page.url or "").lower():
-            await self._page.wait_for_timeout(800)
+        if self.site.open_login_selector:
+            await self._page.locator(self.site.open_login_selector).first.click()
+            await self._page.locator(self.site.username_selector).first.wait_for(state="visible")
+        await self._page.locator(self.site.username_selector).first.fill(account.username)
+        await self._page.locator(self.site.password_selector).first.fill(account.password)
+        await self._page.locator(self.site.login_button_selector).first.click()
+        if self.site.login_success_text:
+            await self._page.get_by_text(self.site.login_success_text, exact=False).first.wait_for()
+        else:
+            await self._page.wait_for_load_state("domcontentloaded")
+            error = self._page.locator(".error")
+            if await error.count():
+                raise RuntimeError(f"登录失败：{await error.first.inner_text()}")
+        if self.site.logged_in_selector:
+            await self._page.locator(self.site.logged_in_selector).first.wait_for()
         self.log(f"账号 {account.username} 登录完成")
 
     async def upload_image(self, image: Path, title: str, category: str) -> None:
@@ -50,24 +57,43 @@ class BrowserUploader:
             raise RuntimeError("uploader has not started an account")
         page = self._page
         await page.goto(self.site.upload_url, wait_until="domcontentloaded")
-        await page.set_input_files(self.site.file_input_selector, str(image))
+        if self.site.open_upload_selector:
+            await page.locator(self.site.open_upload_selector).first.click()
+            if self.site.title_selector:
+                await page.locator(self.site.title_selector).first.wait_for(state="visible")
+        await page.locator(self.site.file_input_selector).first.set_input_files(str(image))
+        if self.site.file_uploaded_text:
+            await page.get_by_text(self.site.file_uploaded_text, exact=False).first.wait_for()
         if self.site.title_selector:
-            await page.fill(self.site.title_selector, title)
-        if self.site.category_selector and category:
-            locator = page.locator(self.site.category_selector)
-            tag = (await locator.evaluate("el => el.tagName.toLowerCase()"))
+            await page.locator(self.site.title_selector).first.fill(title)
+        raw_category = category or self.site.category_value
+        mapped = map_category(raw_category)
+        choices = [item for item in (raw_category, mapped) if item]
+        if self.site.category_selector and choices:
+            locator = page.locator(self.site.category_selector).first
+            tag = await locator.evaluate("el => el.tagName.toLowerCase()")
             if tag == "select":
-                try:
-                    await locator.select_option(label=category)
-                except Exception:
-                    await locator.select_option(value=category)
+                selected = False
+                for item in dict.fromkeys(choices):
+                    try:
+                        await locator.select_option(value=item, timeout=2000)
+                        selected = True
+                        break
+                    except Exception:
+                        try:
+                            await locator.select_option(label=item, timeout=2000)
+                            selected = True
+                            break
+                        except Exception:
+                            continue
+                if not selected:
+                    raise RuntimeError(f"无法选择分类：{raw_category}")
             else:
-                await locator.fill(category)
-        await page.click(self.site.submit_selector)
-        if self.site.success_text:
-            await page.get_by_text(self.site.success_text, exact=False).first.wait_for(
-                timeout=self.site.navigation_timeout_ms
-            )
+                await locator.fill(mapped or raw_category)
+        if self.site.agree_selector:
+            await _check_agreements(page, self.site.agree_selector)
+        await page.locator(self.site.submit_selector).first.click()
+        await _wait_upload_result(page, self.site)
         self.log(f"已上传 {image.name}（标题：{title}）")
 
     async def close(self) -> None:
@@ -81,6 +107,41 @@ class BrowserUploader:
         self._context = None
         self._browser = None
         self._playwright = None
+
+
+async def _check_agreements(page, selector: str) -> None:
+    locators = page.locator('input[name="remember"]')
+    count = await locators.count()
+    for index in range(count):
+        box = locators.nth(index)
+        try:
+            await box.check(force=True)
+        except Exception:
+            continue
+    target = page.locator(selector).first
+    try:
+        await target.check(force=True)
+    except Exception:
+        nearby = page.locator("#layer-upload .layui-form-checkbox").first
+        if await nearby.count():
+            await nearby.click()
+
+
+async def _wait_upload_result(page, site: SiteProfile) -> None:
+    if site.success_text:
+        await page.get_by_text(site.success_text, exact=False).first.wait_for(
+            timeout=site.navigation_timeout_ms
+        )
+        return
+    msg = page.locator(".layui-layer-msg, .layui-layer-dialog").last
+    try:
+        await msg.wait_for(timeout=site.navigation_timeout_ms)
+        text = (await msg.inner_text()).strip()
+    except Exception:
+        return
+    lowered = text.lower()
+    if any(token in lowered for token in ["fail", "error", "please", "失败", "错误"]):
+        raise RuntimeError(f"上传未成功：{text}")
 
 
 async def upload_batches(
