@@ -12,7 +12,8 @@
 - 然后再双击 WallpaperStudio.exe
 
 注意
-- 必须带上整个 WallpaperStudio 文件夹（里面的 _internal 不能丢）
+- 发给别人时：把整个 WallpaperStudio 文件夹打成 zip 再发（_internal 必须在）。不要只发一个 exe。微信/QQ 常会拦 exe。对方解压到桌面后再打开。
+- 不要把你用过的 data\config.json 一起发出去也行；新版本会忽略别人电脑的 C:\Users\... 路径。若对方仍报错，让他删掉 data\config.json 再打开。
 - 上传网页需要 Chromium。新打包会把浏览器打进 _internal；若仍提示找不到浏览器，请安装 Microsoft Edge
 - 不要只拷一个 exe，同目录的其它文件也要一起带走
 - 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）

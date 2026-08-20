@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -14,7 +13,12 @@ from wallpaper_studio import __version__
 from wallpaper_studio.demo_site import demo_router
 from wallpaper_studio.jobs import run_job
 from wallpaper_studio.models import AppConfig
-from wallpaper_studio.storage import load_config, save_config, source_dir, output_dir
+from wallpaper_studio.storage import (
+    load_config,
+    output_dir_status,
+    save_config,
+    source_dir_status,
+)
 from wallpaper_studio.files import empty_source_message, list_images
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
 from wallpaper_studio.sites import SITE_PRESETS
@@ -79,32 +83,68 @@ def create_app() -> FastAPI:
     app.include_router(demo_router)
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+    @app.exception_handler(Exception)
+    async def json_unhandled(_request: Request, exc: Exception) -> JSONResponse:
+        if isinstance(exc, WebSocketDisconnect):
+            raise exc
+        return JSONResponse({"ok": False, "error": f"程序内部错误：{exc}"}, status_code=500)
+
     @app.get("/")
     async def index() -> FileResponse:
         return FileResponse(WEB_DIR / "index.html")
 
     @app.get("/api/state")
     async def api_state() -> JSONResponse:
-        config = load_config()
-        payload = state.snapshot()
-        payload["config"] = config.model_dump()
-        payload["presets"] = {name: profile.model_dump() for name, profile in SITE_PRESETS.items()}
-        src = source_dir(config)
-        images = list_images(src)
-        payload["source_count"] = len(images)
-        payload["output_count"] = len(list_images(output_dir(config)))
-        payload["source_dir"] = str(src)
-        payload["output_dir"] = str(output_dir(config))
-        payload["source_note"] = "" if images else empty_source_message(src)
-        payload["source_samples"] = [path.name for path in images[:8]]
         try:
-            payload["proxy_assignments"] = preview_proxy_assignments(config.accounts, config.network)
-            payload["proxy_error"] = None
-        except ProxyAssignmentError as exc:
-            payload["proxy_assignments"] = []
-            payload["proxy_error"] = str(exc)
-        payload["archive_warning"] = archive_temp_warning()
-        return JSONResponse(payload)
+            config = load_config()
+            payload = state.snapshot()
+            payload["config"] = config.model_dump()
+            payload["presets"] = {name: profile.model_dump() for name, profile in SITE_PRESETS.items()}
+            src, src_note = source_dir_status(config)
+            dest, dest_note = output_dir_status(config)
+            try:
+                images = list_images(src)
+            except Exception as exc:  # noqa: BLE001
+                images = []
+                src_note = src_note or f"无法扫描源目录 {src}：{exc}"
+            try:
+                output_images = list_images(dest)
+            except Exception:  # noqa: BLE001
+                output_images = []
+            payload["source_count"] = len(images)
+            payload["output_count"] = len(output_images)
+            payload["source_dir"] = str(src)
+            payload["output_dir"] = str(dest)
+            payload["source_note"] = src_note or ("" if images else empty_source_message(src))
+            if dest_note and not payload["source_note"]:
+                payload["source_note"] = dest_note
+            payload["source_samples"] = [path.name for path in images[:8]]
+            try:
+                payload["proxy_assignments"] = preview_proxy_assignments(config.accounts, config.network)
+                payload["proxy_error"] = None
+            except ProxyAssignmentError as exc:
+                payload["proxy_assignments"] = []
+                payload["proxy_error"] = str(exc)
+            payload["archive_warning"] = archive_temp_warning()
+            return JSONResponse(payload)
+        except Exception as exc:  # noqa: BLE001 - the UI must always get JSON
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": f"程序内部错误：{exc}",
+                    "running": False,
+                    "logs": [f"程序内部错误：{exc}"],
+                    "source_count": 0,
+                    "output_count": 0,
+                    "source_dir": "",
+                    "output_dir": "",
+                    "source_note": f"程序内部错误：{exc}",
+                    "source_samples": [],
+                    "config": {},
+                    "presets": {},
+                },
+                status_code=500,
+            )
 
     @app.post("/api/config")
     async def api_save_config(payload: dict[str, Any]) -> JSONResponse:

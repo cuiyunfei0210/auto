@@ -128,3 +128,42 @@ def test_state_counts_nested_source_images(studio_home):
     assert state["source_count"] == 1
     assert state["source_note"] == ""
     assert "one.png" in state["source_samples"]
+
+
+def test_state_ignores_other_pc_source_path(studio_home, monkeypatch):
+    from tests.helpers import make_png
+    from wallpaper_studio.models import AppConfig, PathSettings
+    from wallpaper_studio.storage import save_config
+
+    monkeypatch.setenv("USERNAME", "Bob")
+    monkeypatch.setenv("USER", "Bob")
+    make_png(studio_home / "source" / "local.png")
+    save_config(
+        AppConfig(
+            paths=PathSettings(
+                source_dir=r"C:\Users\Administrator\Desktop\WallpaperStudio\data\source",
+            )
+        )
+    )
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    response = client.get("/api/state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_count"] == 1
+    assert "local.png" in body["source_samples"]
+    assert "Administrator" not in body["source_dir"]
+
+
+def test_state_error_payload_is_json(studio_home, monkeypatch):
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("scan exploded")
+
+    monkeypatch.setattr("wallpaper_studio.server.list_images", boom)
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    response = client.get("/api/state")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_count"] == 0
+    assert "scan exploded" in (body.get("source_note") or "")

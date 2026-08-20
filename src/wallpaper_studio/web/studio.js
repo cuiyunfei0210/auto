@@ -154,6 +154,16 @@ function formatErrorPayload(data) {
   return "无法开始";
 }
 
+async function parseJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const snippet = String(text || "").replace(/\s+/g, " ").slice(0, 160);
+    throw new Error(`服务器出错（${res.status}）。${snippet || "请看黑色窗口里的报错。"}`);
+  }
+}
+
 let lastState = {};
 let presets = {};
 
@@ -177,12 +187,20 @@ function applySourceStatus(data) {
 
 async function refresh() {
   const res = await fetch("/api/state");
-  const data = await res.json();
+  const data = await parseJson(res);
+  if (!res.ok) {
+    applySourceStatus({
+      source_count: data.source_count || 0,
+      output_count: data.output_count || 0,
+      source_dir: data.source_dir || "",
+      output_dir: data.output_dir || "",
+      source_note: data.error || data.source_note || `服务器出错（${res.status}）`,
+    });
+    renderLogs(data.logs || [data.error || `服务器出错（${res.status}）`]);
+    throw new Error(data.error || `服务器出错（${res.status}）`);
+  }
   presets = data.presets || presets;
-  applyConfig(data.config);
-  $("source-count").textContent = data.source_count;
-  $("output-count").textContent = data.output_count;
-  $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
+  if (data.config && data.config.mode) applyConfig(data.config);
   applySourceStatus(data);
   const banner = $("env-banner");
   if (banner) {
@@ -218,7 +236,14 @@ async function saveConfig({ silent = false } = {}) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(collectConfig()),
   });
-  const data = await res.json().catch(() => ({}));
+  let data = {};
+  try {
+    data = await parseJson(res);
+  } catch (err) {
+    const message = err && err.message ? err.message : "保存失败，请检查账号和数字是否填完整。";
+    if (!silent) notify(message);
+    return { ok: false, error: message };
+  }
   if (!res.ok) {
     const message = "保存失败，请检查账号和数字是否填完整。";
     if (!silent) notify(message);
@@ -271,7 +296,7 @@ $("btn-start").onclick = async () => {
       return;
     }
     const res = await fetch("/api/start", { method: "POST" });
-    const data = await res.json().catch(() => ({}));
+    const data = await parseJson(res);
     if (!res.ok) {
       setStatus(res.status === 409);
       notify(formatErrorPayload(data));
@@ -335,7 +360,17 @@ function connectWs() {
 async function refreshCounts() {
   try {
     const res = await fetch("/api/state");
-    const data = await res.json();
+    const data = await parseJson(res);
+    if (!res.ok) {
+      applySourceStatus({
+        source_count: 0,
+        output_count: 0,
+        source_dir: data.source_dir || "",
+        output_dir: data.output_dir || "",
+        source_note: data.error || data.source_note || `服务器出错（${res.status}）`,
+      });
+      return;
+    }
     applySourceStatus(data);
     if ("running" in data) setStatus(Boolean(data.running));
   } catch {
