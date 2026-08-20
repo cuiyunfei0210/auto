@@ -51,7 +51,7 @@
             </label>
             <div class="stats">
               <div><em id="source-count">0</em><span>源图</span></div>
-              <div><em id="output-count">0</em><span>结果图</span></div>
+              <div><em id="remix-count">0</em><span>待二创</span></div>
               <div><em id="account-count">0</em><span>账号</span></div>
             </div>
             <div class="actions">
@@ -62,7 +62,7 @@
             <p class="hint" id="path-hint"></p>
             <p class="hint" id="count-hint"></p>
             <p class="hint error" id="source-hint" hidden></p>
-            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。二创走 xmapi 的 gpt-image-2 生图，大约要几十秒，请看右侧日志。本轮按源图张数处理；结果图多出来的是输出文件夹里上次留下的，不会多传一轮。</p>
+            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。二创走 xmapi 的 gpt-image-2 生图，大约要几十秒，请看右侧日志。「待二创」是还没二创完的源图张数，每完成一张减 1。</p>
           </article>
           <article class="card log-card">
             <h2>运行日志</h2>
@@ -180,6 +180,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260820n" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260820r" charset="utf-8"></script>
 </body>
 </html>

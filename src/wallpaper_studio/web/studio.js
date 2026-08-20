@@ -170,16 +170,18 @@ let presets = {};
 function applySourceStatus(data) {
   lastState = data || {};
   $("source-count").textContent = data.source_count == null ? 0 : data.source_count;
-  $("output-count").textContent = data.output_count == null ? 0 : data.output_count;
+  if ($("remix-count")) {
+    $("remix-count").textContent = data.remix_pending == null ? 0 : data.remix_pending;
+  }
   if ($("path-hint") && data.source_dir) {
     $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
   }
   const countHint = $("count-hint");
   if (countHint) {
-    const sourceCount = Number(data.source_count || 0);
-    const outputCount = Number(data.output_count || 0);
-    if (outputCount > sourceCount && sourceCount >= 0) {
-      countHint.textContent = `结果图比源图多 ${outputCount - sourceCount} 张，是输出文件夹里上次二创留下的。本轮仍按 ${sourceCount} 张源图处理，不会把旧文件再传一遍。`;
+    const pending = Number(data.remix_pending == null ? 0 : data.remix_pending);
+    const total = Number(data.remix_total == null ? pending : data.remix_total);
+    if (data.running && total > 0) {
+      countHint.textContent = `待二创 ${pending}/${total}，每完成一张减 1。`;
     } else {
       countHint.textContent = "";
     }
@@ -201,7 +203,7 @@ async function refresh() {
   if (!res.ok) {
     applySourceStatus({
       source_count: data.source_count || 0,
-      output_count: data.output_count || 0,
+      remix_pending: data.remix_pending || 0,
       source_dir: data.source_dir || "",
       output_dir: data.output_dir || "",
       source_note: data.error || data.source_note || `服务器出错（${res.status}）`,
@@ -356,10 +358,24 @@ function connectWs() {
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
   ws.onmessage = (event) => {
     const payload = JSON.parse(event.data);
+    if (payload.type === "remix_progress") {
+      if ($("remix-count") && payload.remaining != null) {
+        $("remix-count").textContent = payload.remaining;
+      }
+      const countHint = $("count-hint");
+      if (countHint && payload.total) {
+        countHint.textContent = `待二创 ${payload.remaining}/${payload.total}，每完成一张减 1。`;
+      }
+      return;
+    }
     if (payload.type === "hello" || payload.type === "reset" || payload.type === "done") {
       renderLogs(payload.logs || []);
+      if (payload.remix_pending != null && $("remix-count")) {
+        $("remix-count").textContent = payload.remix_pending;
+      }
       if (payload.type === "done") {
         setStatus(false);
+        refreshCounts();
         if (payload.last_error) notify(`任务失败：\n${payload.last_error}`);
         else if (payload.last_result) {
           const uploaded = payload.last_result.uploaded;
@@ -391,7 +407,7 @@ async function refreshCounts() {
     if (!res.ok) {
       applySourceStatus({
         source_count: 0,
-        output_count: 0,
+        remix_pending: 0,
         source_dir: data.source_dir || "",
         output_dir: data.output_dir || "",
         source_note: data.error || data.source_note || `服务器出错（${res.status}）`,

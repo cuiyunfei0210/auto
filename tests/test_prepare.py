@@ -62,3 +62,29 @@ def test_prepare_reads_nested_source_image(studio_home):
     prepared = prepare_images(config)
     assert len(prepared) == 1
     assert prepared[0].exists()
+
+
+def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="remix_then_upload",
+        api=ApiSettings(api_key="sk-test"),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=2, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(studio_home / "source" / "one.png")
+    make_png(studio_home / "source" / "two.png", (10, 20, 30))
+    ticks: list[tuple[int, int]] = []
+
+    def fake_remix(self, source, dest_dir, title):
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{title}.png"
+        path.write_bytes(source.read_bytes())
+        return path
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
+    prepared = prepare_images(config, progress=lambda left, total: ticks.append((left, total)))
+    assert len(prepared) == 2
+    assert ticks[0] == (2, 2)
+    assert ticks[1] == (1, 2)
+    assert ticks[2] == (0, 2)

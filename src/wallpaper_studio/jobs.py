@@ -10,6 +10,7 @@ from wallpaper_studio.scheduler import plan_account_batches
 from wallpaper_studio.uploader import upload_batches
 
 LogFn = Callable[[str], None]
+ProgressFn = Callable[[int, int], None]
 
 
 async def run_job(
@@ -19,6 +20,7 @@ async def run_job(
     uploader=None,
     skip_prepare: bool = False,
     prepared: list[Path] | None = None,
+    progress: ProgressFn | None = None,
 ) -> dict:
     emit = log or (lambda _message: None)
     if not config.accounts:
@@ -30,9 +32,9 @@ async def run_job(
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            images = prepare_images(config, emit)
+            images = prepare_images(config, emit, progress)
         else:
-            images = await asyncio.to_thread(prepare_images, config, emit)
+            images = await asyncio.to_thread(prepare_images, config, emit, progress)
     if not images:
         raise FileNotFoundError("没有可上传的图片。")
 

@@ -38,6 +38,8 @@ class StudioState:
         self.last_error: str | None = None
         self.subscribers: set[WebSocket] = set()
         self._lock = asyncio.Lock()
+        self.remix_remaining: int | None = None
+        self.remix_total: int | None = None
 
     def note(self, message: str) -> None:
         """Record a log line immediately so later failure text cannot jump ahead."""
@@ -71,6 +73,8 @@ class StudioState:
             "logs": self.logs[-200:],
             "last_result": self.last_result,
             "last_error": self.last_error,
+            "remix_pending": self.remix_remaining,
+            "remix_total": self.remix_total,
             "version": __version__,
         }
 
@@ -118,6 +122,15 @@ def create_app() -> FastAPI:
                 output_images = []
             payload["source_count"] = len(images)
             payload["output_count"] = len(output_images)
+            if state.running and state.remix_remaining is not None:
+                payload["remix_pending"] = state.remix_remaining
+                payload["remix_total"] = state.remix_total if state.remix_total is not None else state.remix_remaining
+            elif config.mode == "remix_then_upload":
+                payload["remix_pending"] = len(images)
+                payload["remix_total"] = len(images)
+            else:
+                payload["remix_pending"] = 0
+                payload["remix_total"] = 0
             payload["source_dir"] = str(src)
             payload["output_dir"] = str(dest)
             payload["source_note"] = src_note or ("" if images else empty_source_message(src))
@@ -141,6 +154,8 @@ def create_app() -> FastAPI:
                     "logs": [f"程序内部错误：{exc}"],
                     "source_count": 0,
                     "output_count": 0,
+                    "remix_pending": 0,
+                    "remix_total": 0,
                     "source_dir": "",
                     "output_dir": "",
                     "source_note": f"程序内部错误：{exc}",
@@ -180,9 +195,26 @@ def create_app() -> FastAPI:
             state.last_error = None
             state.last_result = None
             state.logs = []
+            if config.mode == "remix_then_upload":
+                src, _note = source_dir_status(config)
+                try:
+                    pending = len(list_images(src))
+                except Exception:
+                    pending = 0
+                state.remix_remaining = pending
+                state.remix_total = pending
+            else:
+                state.remix_remaining = 0
+                state.remix_total = 0
             state.note("任务已开始")
             state.task = asyncio.create_task(_run(config))
-        await state.send_event({"type": "reset", "logs": state.logs, "running": True})
+        await state.send_event({
+            "type": "reset",
+            "logs": state.logs,
+            "running": True,
+            "remix_pending": state.remix_remaining,
+            "remix_total": state.remix_total,
+        })
         return JSONResponse({"ok": True, "logs": list(state.logs)})
 
     @app.post("/api/stop")
@@ -220,6 +252,26 @@ async def _run(config: AppConfig) -> None:
         state.note(message)
         loop.call_soon_threadsafe(schedule_broadcast, message)
 
+    def progress(remaining: int, total: int) -> None:
+        state.remix_remaining = remaining
+        state.remix_total = total
+
+        def emit_progress(left: int = remaining, all_count: int = total) -> None:
+            broadcasts.append(
+                asyncio.create_task(
+                    state.send_event(
+                        {
+                            "type": "remix_progress",
+                            "remaining": left,
+                            "total": all_count,
+                            "remix_pending": left,
+                        }
+                    )
+                )
+            )
+
+        loop.call_soon_threadsafe(emit_progress)
+
     async def flush_logs() -> None:
         await asyncio.sleep(0)
         if broadcasts:
@@ -227,7 +279,7 @@ async def _run(config: AppConfig) -> None:
             broadcasts.clear()
 
     try:
-        result = await run_job(config, log=log)
+        result = await run_job(config, log=log, progress=progress)
         await flush_logs()
         state.last_result = result
         await state.emit("任务完成")
@@ -244,6 +296,8 @@ async def _run(config: AppConfig) -> None:
     finally:
         state.running = False
         state.task = None
+        state.remix_remaining = None
+        state.remix_total = None
         await state.send_event({"type": "done", **state.snapshot()})
 
 

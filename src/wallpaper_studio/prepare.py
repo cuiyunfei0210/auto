@@ -10,9 +10,14 @@ from wallpaper_studio.relay import ApiError, RelayClient, chat_model_supports_ti
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
+ProgressFn = Callable[[int, int], None]
 
 
-def prepare_images(config: AppConfig, log: LogFn | None = None) -> list[Path]:
+def prepare_images(
+    config: AppConfig,
+    log: LogFn | None = None,
+    progress: ProgressFn | None = None,
+) -> list[Path]:
     """Build the folder that will be uploaded.
 
     upload_only: images from the source folder, optionally renamed via API.
@@ -41,6 +46,11 @@ def prepare_images(config: AppConfig, log: LogFn | None = None) -> list[Path]:
             f"文件名模型 {config.api.filename_model} 不能写标题，全部沿用原文件名"
         )
 
+    remaining = len(images) if config.mode == "remix_then_upload" else 0
+    total = remaining
+    if progress:
+        progress(remaining, total)
+
     for image in images:
         title = image.stem
         if can_rename:
@@ -63,6 +73,9 @@ def prepare_images(config: AppConfig, log: LogFn | None = None) -> list[Path]:
                     f"{image.name} 二创失败。{friendly_error_message(str(exc))}"
                 ) from exc
             emit(f"已保存二创结果 {prepared[-1].name}")
+            remaining -= 1
+            if progress:
+                progress(remaining, total)
         else:
             target = unique_path(dest, title, image.suffix.lower())
             copy2(image, target)

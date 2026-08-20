@@ -90,6 +90,7 @@ def test_state_includes_archive_warning_field(studio_home):
     assert state["archive_warning"] is None
     assert "source_note" in state
     assert "没有图片" in state["source_note"]
+    assert state["remix_pending"] == 0
 
 
 def test_start_returns_409_when_a_job_is_already_running(studio_home):
@@ -129,6 +130,23 @@ def test_state_counts_nested_source_images(studio_home):
     assert state["source_count"] == 1
     assert state["source_note"] == ""
     assert "one.png" in state["source_samples"]
+    assert state["remix_pending"] == 0
+
+
+def test_state_remix_pending_matches_source_images(studio_home):
+    from tests.helpers import make_png
+    from wallpaper_studio.models import AppConfig, PathSettings
+    from wallpaper_studio.storage import save_config
+
+    make_png(studio_home / "source" / "a.png")
+    make_png(studio_home / "source" / "b.png", (1, 2, 3))
+    save_config(AppConfig(mode="remix_then_upload", paths=PathSettings(source_dir=str(studio_home / "source"))))
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    state = client.get("/api/state").json()
+    assert state["source_count"] == 2
+    assert state["remix_pending"] == 2
+    assert state["remix_total"] == 2
 
 
 def test_state_ignores_other_pc_source_path(studio_home, monkeypatch):
