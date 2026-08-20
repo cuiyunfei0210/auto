@@ -2,7 +2,7 @@ from pathlib import Path
 
 from wallpaper_studio.files import filter_by_min_size
 from wallpaper_studio.models import SiteProfile
-from wallpaper_studio.sites import cqwall_site, map_category
+from wallpaper_studio.sites import cqwall_category_hint, cqwall_site, map_category
 from tests.helpers import make_png
 
 
@@ -11,6 +11,21 @@ def test_map_category_accepts_chinese_and_ids():
     assert map_category("Scenery") == "9"
     assert map_category("9") == "9"
     assert map_category("动漫") == "10"
+    assert map_category("军事") == "2"
+    assert map_category("都市") == "18"
+    assert map_category("美女") == "8"
+
+
+def test_cqwall_category_hint_lists_all_live_ids():
+    hint = cqwall_category_hint()
+    assert hint == (
+        "1 动物 / 2 军事 / 3 汽车 / 4 电影 / 5 时代 / 6 明星 / "
+        "7 宇宙 / 8 美女 / 9 风景 / 10 动漫 / 17 游戏 / 18 都市"
+    )
+    html = (Path(__file__).resolve().parents[1] / "src/wallpaper_studio/web/index.html").read_text(
+        encoding="utf-8"
+    )
+    assert hint in html
 
 
 def test_category_choices_include_id_and_names():

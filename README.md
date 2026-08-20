@@ -79,7 +79,7 @@ python run.py
 4. 点「开始任务」
 5. 打开 [示例站上传页](http://127.0.0.1:8765/demo/login) 查看两个账号各自收到的图
 
-对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)，账号页预填 `ari-ihcot@linshi-mail.com`。分类默认风景（值为 9）。程序不限制图片宽高。
+对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)，账号页预填 `ari-ihcot@linshi-mail.com`。分类默认风景（值为 9）。当前分类：1 动物 / 2 军事 / 3 汽车 / 4 电影 / 5 时代 / 6 明星 / 7 宇宙 / 8 美女 / 9 风景 / 10 动漫 / 17 游戏 / 18 都市。程序不限制图片宽高。
 
 中转站默认 [xmapi.site](https://xmapi.site/)，不要填 `xbhuiz.com`（那条线路不能生图）。接口地址不要带 `/v1`。账号队列里不要填中转站邮箱。
 

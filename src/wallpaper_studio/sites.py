@@ -8,6 +8,7 @@ CQWALL_CATEGORIES = {
     "military fan": "2",
     "military": "2",
     "军事": "2",
+    "军事迷": "2",
     "cars": "3",
     "汽车": "3",
     "movie": "4",
@@ -29,6 +30,27 @@ CQWALL_CATEGORIES = {
     "urban": "18",
     "都市": "18",
 }
+
+# Live CQwall nav order: Games, Anime, Scenery, Girl, Universe, Celebrity,
+# Era, Movie, Cars, Military fan, Animals, Urban.
+CQWALL_CATEGORY_LABELS = (
+    ("1", "动物"),
+    ("2", "军事"),
+    ("3", "汽车"),
+    ("4", "电影"),
+    ("5", "时代"),
+    ("6", "明星"),
+    ("7", "宇宙"),
+    ("8", "美女"),
+    ("9", "风景"),
+    ("10", "动漫"),
+    ("17", "游戏"),
+    ("18", "都市"),
+)
+
+
+def cqwall_category_hint() -> str:
+    return " / ".join(f"{cid} {name}" for cid, name in CQWALL_CATEGORY_LABELS)
 
 
 def map_category(value: str) -> str:
