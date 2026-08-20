@@ -22,7 +22,7 @@ class ApiError(RuntimeError):
 def friendly_error_message(raw: str) -> str:
     """Turn known relay/API failures into an actionable Chinese explanation."""
     text = (raw or "").strip()
-    if "中转站的 /v1/images" in text or "中转站生图接口" in text or "中转站已关闭批量生图" in text:
+    if "中转站的 /v1/images" in text or "中转站生图接口" in text or "中转站已关闭批量生图" in text or "中转站没有可用的生图线路" in text:
         return text
     lowered = text.lower()
     if "image_generation" in lowered and "tools" in lowered:
@@ -48,6 +48,7 @@ def friendly_error_message(raw: str) -> str:
             "这是 xmapi 这组 Key 后面没有能跑 gpt-image-2 / 图编辑的账号，不是 CQwall、也不是本地图片坏了。"
             "请到中转站后台看这组 Key 是否还能生图、额度是否用完；或先改用「跳过二创，直接上传」。"
         )
+    if "batch_image_disabled" in lowered or "batch image" in lowered:
         return (
             "中转站已关闭批量生图接口。请改成「跳过二创，直接上传」，或换一组能用的图片模型。"
         )
