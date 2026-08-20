@@ -58,12 +58,23 @@ def test_start_rejects_shared_proxy(studio_home):
     assert "独立出口" in started.json()["error"]
 
 
-def test_start_rejects_empty_accounts(studio_home):
+def test_empty_accounts_are_restored_to_default(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
-    started = client.post("/api/start")
-    assert started.status_code == 400
-    assert "账号" in started.json()["error"]
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = []
+    assert client.post("/api/config", json=payload).status_code == 200
+    state = client.get("/api/state").json()["config"]
+    assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
+
+
+def test_default_state_includes_cqwall_and_xbhuiz(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    state = client.get("/api/state").json()["config"]
+    assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
+    assert "xbhuiz.com" in state["api"]["base_url"]
+    assert state["api"]["username"] == "596003517@qq.com"
 
 
 def test_state_includes_archive_warning_field(studio_home):

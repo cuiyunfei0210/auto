@@ -60,4 +60,8 @@ def prepare_images(config: AppConfig, log: LogFn | None = None) -> list[Path]:
 def _needs_api(config: AppConfig) -> bool:
     if config.mode == "remix_then_upload":
         return True
-    return bool(config.api.api_key.strip() and config.api.filename_prompt.strip())
+    has_secret = bool(
+        config.api.api_key.strip()
+        or (config.api.username.strip() and config.api.password)
+    )
+    return has_secret and bool(config.api.filename_prompt.strip())

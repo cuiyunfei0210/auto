@@ -54,7 +54,7 @@ def test_remix_uses_responses_instead_of_broken_images_endpoint(tmp_path: Path):
         seen.append(request.url.path)
         body = json.loads(request.content)
         if request.url.path.endswith("/v1/responses"):
-            assert body["model"] == "gpt-5.4-mini"
+            assert body["model"] == "gpt-image-2"
             assert body["tool_choice"] == "auto"
             assert body["tools"][0]["type"] == "image_generation"
             assert any(
@@ -106,3 +106,38 @@ def test_remix_falls_back_to_chat_if_responses_has_no_image(tmp_path: Path):
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
     assert dest.read_bytes() == source.read_bytes()
+
+
+def test_resolves_api_key_by_logging_into_relay(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.method} {request.url.path}")
+        if request.url.path.endswith("/api/v1/auth/login"):
+            body = json.loads(request.content)
+            assert body["email"] == "596003517@qq.com"
+            return httpx.Response(200, json={"code": 0, "data": {"access_token": "jwt-test"}})
+        if request.url.path.endswith("/api/v1/keys"):
+            assert request.headers["Authorization"] == "Bearer jwt-test"
+            return httpx.Response(
+                200,
+                json={"code": 0, "data": {"items": [{"key": "sk-from-login", "status": "active"}]}},
+            )
+        if request.url.path.endswith("/v1/responses"):
+            assert request.headers["Authorization"] == "Bearer sk-from-login"
+            return httpx.Response(
+                200,
+                json={"output": [{"type": "image_generation_call", "result": image_b64}]},
+            )
+        return httpx.Response(404, json={"error": {"message": request.url.path}})
+
+    client = RelayClient(
+        ApiSettings(api_key="", username="596003517@qq.com", password="123123"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert any(item.endswith("/api/v1/auth/login") for item in seen)
+    assert any(item.endswith("/api/v1/keys") for item in seen)

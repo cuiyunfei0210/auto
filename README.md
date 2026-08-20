@@ -52,7 +52,7 @@ Windows / Linux / macOS 都会各打一份。
 ## 能做什么
 
 - 跳过二创，直接选本地文件夹上传
-- 对接中转站 API（`https://api.newxxt.top`）做图生图，并按提示词生成标题
+- 对接中转站 API（默认 `https://xbhuiz.com`，可用邮箱密码自动取 Key）做图生图，并按提示词生成标题
 - 多账号队列：每个账号可设上传数量、间隔和独立代理
 - 用 Chromium 打开登录页、填表、选文件、点发布（不调壁纸站后台接口）
 - 代理可选。默认 **一个账号一个出口 IP**，代理不够或两个账号填了同一个代理时会拒绝开跑；关掉代理也能正常上传
@@ -74,19 +74,19 @@ python run.py
 
 1. 把几张图放进 `data/source`（或在界面里填写源文件夹）
 2. 任务模式选 **跳过二创，直接上传源文件夹**
-3. 账号保持默认的 `demo1` / `demo2`（密码 `123123`）
+3. 账号页默认已填 CQwall 邮箱 `ari-ihcot@linshi-mail.com`
 4. 点「开始任务」
 5. 打开 [示例站上传页](http://127.0.0.1:8765/demo/login) 查看两个账号各自收到的图
 
-对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)。在「账号」页填写邮箱和密码。分类默认风景（值为 9）。程序不限制图片宽高。
+对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)，账号页预填 `ari-ihcot@linshi-mail.com`。分类默认风景（值为 9）。程序不限制图片宽高。
 
-账号密码只保存在本机 `data/config.json`，不要提交到 git。
+中转站默认 [xbhuiz.com](https://xbhuiz.com/)，用「二创 API」里的邮箱密码自动取 Key。账号队列里不要填中转站邮箱。
 
 ## 二创
 
-在「二创 API」填中转站地址和 API Key（只保存在本机 `data/config.json`）。
+在「二创 API」可改中转站地址、邮箱密码或 API Key。当前默认是 `https://xbhuiz.com`。该站的生图 Key 目前模型列表里常见只有 `gpt-image-2`，所以对话模型和文件名模型也默认用它。
 
-部分中转站的 `/v1/images/edits` 会返回 `Tool choice 'image_generation' not found in 'tools' parameter`。程序会改走 `/v1/responses` 对话画图：对话模型用 `gpt-5.4-mini` 这类能聊天的模型，生图模型仍填 `gpt-image-2`。不要把 `gpt-image-2` 填进对话模型。
+部分中转站的 `/v1/images/edits` 会返回 `Tool choice 'image_generation' not found in 'tools' parameter`。程序会改走 `/v1/responses` 对话画图。请把对话模型改成该站实际有的模型；xbhuiz 当前生图 Key 常见只有 `gpt-image-2`。
 
 文件名提示词会走 `/v1/chat/completions`，用生成的标题作为上传标题。
 

@@ -27,8 +27,8 @@ def friendly_error_message(raw: str) -> str:
     if "image_generation" in lowered and "tools" in lowered:
         return (
             "中转站的 /v1/images 生图通道仍在报 Tool choice 'image_generation' not found in 'tools' parameter。"
-            "程序已改走 /v1/responses 对话画图（带 tools），若仍然失败，请把「二创对话模型」留成 gpt-5.4-mini 这类能聊天的模型，"
-            "不要把 gpt-image-2 填进对话模型；并确认 Key 所在分组的上游账号开通了画图。"
+            "程序已改走 /v1/responses 对话画图（带 tools），若仍然失败，请把「二创对话模型」改成这个中转站实际有的模型"
+            "（当前 xbhuiz 生图 Key 常见只有 gpt-image-2），并确认账号下有可用 Key。"
             "实在不行再暂时改用「跳过二创」。"
         )
     if "batch_image_disabled" in lowered or "batch image" in lowered:
@@ -36,6 +36,60 @@ def friendly_error_message(raw: str) -> str:
             "中转站已关闭批量生图接口。请改成「跳过二创，直接上传」，或换一组能用的图片模型。"
         )
     return text or "未知错误"
+
+
+def normalize_api_base(url: str) -> str:
+    text = (url or "").strip().rstrip("/")
+    if text.lower().endswith("/v1"):
+        text = text[:-3].rstrip("/")
+    return text or "https://xbhuiz.com"
+
+
+def resolve_api_key(settings: ApiSettings, transport: httpx.BaseTransport | None = None) -> str:
+    if settings.api_key.strip():
+        return settings.api_key.strip()
+    email = settings.username.strip()
+    password = settings.password
+    if not email or not password:
+        raise ApiError("还没有填写 API Key，也没有中转站邮箱密码。")
+    base = normalize_api_base(settings.base_url)
+    kwargs: dict = {"timeout": 30.0}
+    if transport is not None:
+        kwargs["transport"] = transport
+    with httpx.Client(**kwargs) as client:
+        login = client.post(
+            f"{base}/api/v1/auth/login",
+            json={"email": email, "password": password},
+        )
+        data = _json_or_error(login)
+        token = ""
+        if isinstance(data, dict):
+            inner = data.get("data") if isinstance(data.get("data"), dict) else data
+            token = str((inner or {}).get("access_token") or "")
+        if not token:
+            raise ApiError("中转站登录成功，但没有返回 access_token。")
+        keys = client.get(
+            f"{base}/api/v1/keys",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        payload = _json_or_error(keys)
+        items = []
+        if isinstance(payload, dict):
+            inner = payload.get("data")
+            if isinstance(inner, dict):
+                items = inner.get("items") or inner.get("keys") or []
+            elif isinstance(inner, list):
+                items = inner
+        active = [
+            item.get("key")
+            for item in items
+            if isinstance(item, dict)
+            and item.get("key")
+            and str(item.get("status") or "active").lower() in {"", "active", "enabled", "1"}
+        ]
+        if not active:
+            raise ApiError("中转站账号下没有可用的 API Key，请先在网站里创建一个。")
+        return str(active[0])
 
 
 def official_image_size(value: str) -> str:
@@ -63,24 +117,24 @@ class RelayClient:
         self.settings = settings
         self.timeout = timeout
         self.transport = transport
+        self._resolved_key: str | None = None
 
     def _headers(self) -> dict[str, str]:
-        key = self.settings.api_key.strip()
-        if not key:
-            raise ApiError("还没有填写 API Key。")
+        if not self._resolved_key:
+            self._resolved_key = resolve_api_key(self.settings, transport=self.transport)
         return {
-            "Authorization": f"Bearer {key}",
+            "Authorization": f"Bearer {self._resolved_key}",
             "Content-Type": "application/json",
         }
 
     def _url(self, path: str) -> str:
-        return self.settings.base_url.rstrip("/") + path
+        return normalize_api_base(self.settings.base_url) + path
 
     def _chat_model(self) -> str:
         return (
             self.settings.remix_chat_model.strip()
             or self.settings.filename_model.strip()
-            or "gpt-5.4-mini"
+            or "gpt-image-2"
         )
 
     def _post_json(self, path: str, payload: dict) -> dict:

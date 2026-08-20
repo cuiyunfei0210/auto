@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from wallpaper_studio.jobs import run_job
-from wallpaper_studio.models import Account, AppConfig, NetworkSettings, PathSettings, SiteProfile
+from wallpaper_studio.models import Account, AppConfig, NetworkSettings, PathSettings, SiteProfile, apply_builtin_defaults
 from wallpaper_studio.storage import save_config, source_dir
 from tests.helpers import make_png
 
@@ -95,7 +95,21 @@ async def test_job_gives_each_account_its_own_proxy(studio_home):
 
 
 async def test_job_requires_accounts_before_prepare(studio_home):
-    config = AppConfig(mode="remix_then_upload")
+    config = AppConfig(mode="remix_then_upload", accounts=[])
     save_config(config)
     with pytest.raises(ValueError, match="还没有添加账号"):
         await run_job(config)
+
+
+def test_apply_defaults_adds_cqwall_and_switches_old_relay():
+    config = AppConfig.model_validate(
+        {
+            "api": {"base_url": "https://api.newxxt.top", "api_key": "sk-old"},
+            "accounts": [{"username": "1252597792@qq.com", "password": "123123"}],
+        }
+    )
+    updated = apply_builtin_defaults(config)
+    assert updated.api.base_url == "https://xbhuiz.com"
+    assert updated.api.api_key == ""
+    assert updated.accounts[0].username == "ari-ihcot@linshi-mail.com"
+    assert all(item.username != "1252597792@qq.com" for item in updated.accounts)

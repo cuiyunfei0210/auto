@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from wallpaper_studio.models import AppConfig
+from wallpaper_studio.models import AppConfig, apply_builtin_defaults
 from wallpaper_studio.paths import app_root
 
 DEFAULT_PORT = 8765
@@ -28,11 +28,15 @@ def config_path() -> Path:
 def load_config() -> AppConfig:
     path = config_path()
     if not path.exists():
-        config = AppConfig()
+        config = apply_builtin_defaults(AppConfig())
         save_config(config)
         return config
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return AppConfig.model_validate(payload)
+    loaded = AppConfig.model_validate(payload)
+    config = apply_builtin_defaults(loaded)
+    if config.model_dump() != loaded.model_dump():
+        save_config(config)
+    return config
 
 
 def save_config(config: AppConfig) -> None:

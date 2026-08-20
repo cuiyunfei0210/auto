@@ -52,6 +52,8 @@ function collectConfig() {
 
   const api = {};
   for (const key of apiFields) api[key] = $(key).value;
+  api.username = $("api_username") ? $("api_username").value.trim() : "";
+  api.password = $("api_password") ? $("api_password").value : "";
 
   return {
     mode: document.querySelector("input[name=mode]:checked").value,
@@ -81,6 +83,8 @@ function applyConfig(config) {
     $("site_preset").value = (config.site.login_url || "").includes("cqwall.com") ? "cqwall" : "demo";
   }
   for (const key of apiFields) $(key).value = config.api[key] ?? "";
+  if ($("api_username")) $("api_username").value = config.api.username || "";
+  if ($("api_password")) $("api_password").value = config.api.password || "";
   $("proxy_enabled").checked = Boolean(config.network.proxy_enabled);
   $("unique_ip_per_account").checked = config.network.unique_ip_per_account !== false;
   $("rotate_every_accounts").value = config.network.rotate_every_accounts ?? 1;
