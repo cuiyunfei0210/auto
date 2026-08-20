@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
 import time
 import traceback
-import webbrowser
 from pathlib import Path
 
 # Allow `python -m wallpaper_studio` from a source checkout.
@@ -25,7 +25,13 @@ def main() -> None:
     args = parser.parse_args()
 
     from wallpaper_studio.browser import configure_playwright_env
-    from wallpaper_studio.instance_lock import InstanceLock, InstanceLockError, already_running_message
+    from wallpaper_studio.instance_lock import (
+        InstanceLock,
+        InstanceLockError,
+        already_running_message,
+        open_ui,
+        wait_and_open_ui,
+    )
     from wallpaper_studio.paths import app_root
     from wallpaper_studio.storage import load_config
 
@@ -46,11 +52,15 @@ def main() -> None:
     try:
         lock.acquire()
     except InstanceLockError:
-        print(already_running_message(url))
-        if not args.no_browser:
-            webbrowser.open(url)
-        _pause_if_windows()
-        sys.exit(1)
+        try:
+            lock.take_over_stale(url)
+            print("上次程序没有正常退出，已重新启动。请不要关闭这个窗口。")
+        except InstanceLockError:
+            print(already_running_message(url))
+            if not args.no_browser:
+                open_ui(url)
+            _pause_if_windows()
+            sys.exit(1)
 
     try:
         import uvicorn
@@ -61,9 +71,10 @@ def main() -> None:
         print("  壁纸工坊已启动（请不要关闭这个窗口）")
         print(f"  界面地址：{url}")
         print("=" * 48)
+        print("  正在等待浏览器打开，请稍等几秒…")
         print()
         if not args.no_browser:
-            webbrowser.open(url)
+            threading.Thread(target=wait_and_open_ui, args=(url,), daemon=True).start()
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     except OSError as exc:
         print(f"无法启动界面服务：{exc}")

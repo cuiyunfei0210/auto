@@ -102,6 +102,10 @@ def create_app() -> FastAPI:
     async def index() -> FileResponse:
         return FileResponse(WEB_DIR / "index.html")
 
+    @app.get("/api/health")
+    async def api_health() -> JSONResponse:
+        return JSONResponse({"ok": True})
+
     @app.get("/api/state")
     async def api_state() -> JSONResponse:
         try:
