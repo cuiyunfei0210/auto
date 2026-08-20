@@ -99,6 +99,8 @@ function setStatus(running) {
   const pill = $("status-pill");
   pill.textContent = running ? "运行中" : "空闲";
   pill.classList.toggle("live", running);
+  $("btn-start").disabled = Boolean(running);
+  $("btn-stop").disabled = !running;
 }
 
 function renderLogs(lines) {
@@ -174,12 +176,15 @@ document.querySelectorAll("aside nav button").forEach((button) => {
 $("btn-add-account").onclick = () => $("account-rows").appendChild(accountRow());
 $("btn-save").onclick = saveConfig;
 $("btn-start").onclick = async () => {
+  if ($("btn-start").disabled) return;
+  $("btn-start").disabled = true;
   await saveConfig();
   const res = await fetch("/api/start", { method: "POST" });
   const data = await res.json();
   if (!res.ok) {
+    if (res.status !== 409) $("btn-start").disabled = false;
+    setStatus(res.status === 409);
     alert(data.error || "无法开始");
-    setStatus(false);
     return;
   }
   setStatus(true);

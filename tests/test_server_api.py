@@ -83,3 +83,17 @@ def test_state_includes_archive_warning_field(studio_home):
     state = client.get("/api/state").json()
     assert "archive_warning" in state
     assert state["archive_warning"] is None
+
+
+def test_start_returns_409_when_a_job_is_already_running(studio_home):
+    from wallpaper_studio.server import state as studio_state
+
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    studio_state.running = True
+    try:
+        started = client.post("/api/start")
+        assert started.status_code == 409
+        assert "正在运行" in started.json()["error"]
+    finally:
+        studio_state.running = False
