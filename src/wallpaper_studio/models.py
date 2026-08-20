@@ -43,6 +43,7 @@ class Account(BaseModel):
     password: str
     upload_count: int = Field(default=3, ge=1, le=500)
     interval_seconds: float = Field(default=8, ge=0, le=3600)
+    proxy: str | None = None
 
     @field_validator("username", "password")
     @classmethod
@@ -52,10 +53,19 @@ class Account(BaseModel):
             raise ValueError("cannot be empty")
         return value
 
+    @field_validator("proxy", mode="before")
+    @classmethod
+    def empty_proxy(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
 
 class NetworkSettings(BaseModel):
     proxy_enabled: bool = False
-    rotate_every_accounts: int = Field(default=5, ge=1, le=100)
+    unique_ip_per_account: bool = True
+    rotate_every_accounts: int = Field(default=1, ge=1, le=100)
     proxies: list[str] = Field(default_factory=list)
 
 

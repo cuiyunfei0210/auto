@@ -21,3 +21,25 @@ def test_home_and_config_roundtrip(studio_home):
     saved = client.post("/api/config", json=payload)
     assert saved.status_code == 200
     assert saved.json()["config"]["accounts"][0]["username"] == "demo1"
+
+
+def test_start_rejects_shared_proxy(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = [
+        {"username": "demo1", "password": "123123", "upload_count": 1, "interval_seconds": 0},
+        {"username": "demo2", "password": "123123", "upload_count": 1, "interval_seconds": 0},
+    ]
+    payload["network"] = {
+        "proxy_enabled": True,
+        "unique_ip_per_account": True,
+        "rotate_every_accounts": 1,
+        "proxies": ["http://10.0.0.1:8080"],
+    }
+    assert client.post("/api/config", json=payload).status_code == 200
+    state = client.get("/api/state").json()
+    assert state["proxy_error"]
+    started = client.post("/api/start")
+    assert started.status_code == 400
+    assert "独立出口" in started.json()["error"]

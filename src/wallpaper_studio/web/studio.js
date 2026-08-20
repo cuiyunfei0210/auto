@@ -1,7 +1,7 @@
 const headings = {
   job: ["任务", "先准备图片，再按账号队列模拟网页上传。"],
   folders: ["文件夹", "源图和一个单独的输出目录。"],
-  accounts: ["账号", "一个账号的数量用完，才会登录下一个。"],
+  accounts: ["账号", "一个账号传完再换下一个；每个账号尽量使用不同出口。"],
   site: ["网页上传", "用浏览器填登录表和上传表，不调用壁纸站后台接口。"],
   api: ["二创 API", "对接中转站。可随时跳过这一步。"],
 };
@@ -16,13 +16,14 @@ const apiFields = ["base_url", "api_key", "remix_model", "filename_model", "remi
 
 function $(id) { return document.getElementById(id); }
 
-function accountRow(account = { username: "", password: "", upload_count: 3, interval_seconds: 8 }) {
+function accountRow(account = { username: "", password: "", upload_count: 3, interval_seconds: 8, proxy: "" }) {
   const tr = document.createElement("tr");
   tr.innerHTML = `
     <td><input class="acc-user" value="${escapeAttr(account.username)}"></td>
     <td><input class="acc-pass" type="password" value="${escapeAttr(account.password)}"></td>
     <td><input class="acc-count" type="number" min="1" value="${account.upload_count}"></td>
     <td><input class="acc-interval" type="number" min="0" step="0.5" value="${account.interval_seconds}"></td>
+    <td><input class="acc-proxy" placeholder="空则用代理池" value="${escapeAttr(account.proxy || "")}"></td>
     <td><button type="button" class="linkish acc-del">删除</button></td>
   `;
   tr.querySelector(".acc-del").onclick = () => tr.remove();
@@ -39,6 +40,7 @@ function collectConfig() {
     password: row.querySelector(".acc-pass").value,
     upload_count: Number(row.querySelector(".acc-count").value || 1),
     interval_seconds: Number(row.querySelector(".acc-interval").value || 0),
+    proxy: row.querySelector(".acc-proxy").value.trim(),
   })).filter((item) => item.username && item.password);
 
   const site = {};
@@ -59,7 +61,8 @@ function collectConfig() {
     accounts,
     network: {
       proxy_enabled: $("proxy_enabled").checked,
-      rotate_every_accounts: Number($("rotate_every_accounts").value || 5),
+      unique_ip_per_account: $("unique_ip_per_account").checked,
+      rotate_every_accounts: Number($("rotate_every_accounts").value || 1),
       proxies: $("proxies").value.split("\n").map((line) => line.trim()).filter(Boolean),
     },
   };
@@ -73,7 +76,8 @@ function applyConfig(config) {
   $("headless").checked = Boolean(config.site.headless);
   for (const key of apiFields) $(key).value = config.api[key] ?? "";
   $("proxy_enabled").checked = Boolean(config.network.proxy_enabled);
-  $("rotate_every_accounts").value = config.network.rotate_every_accounts ?? 5;
+  $("unique_ip_per_account").checked = config.network.unique_ip_per_account !== false;
+  $("rotate_every_accounts").value = config.network.rotate_every_accounts ?? 1;
   $("proxies").value = (config.network.proxies || []).join("\n");
   const body = $("account-rows");
   body.innerHTML = "";
@@ -99,6 +103,20 @@ async function refresh() {
   $("source-count").textContent = data.source_count;
   $("output-count").textContent = data.output_count;
   $("path-hint").textContent = `源目录 ${data.source_dir} · 输出目录 ${data.output_dir}`;
+  const hint = $("proxy-hint");
+  if (hint) {
+    if (data.proxy_error) {
+      hint.textContent = data.proxy_error;
+      hint.classList.add("error");
+    } else if ((data.proxy_assignments || []).length) {
+      const lines = data.proxy_assignments.map((row) => `${row.username} → ${row.proxy || "直连"}`);
+      hint.textContent = lines.join("；");
+      hint.classList.remove("error");
+    } else {
+      hint.textContent = "";
+      hint.classList.remove("error");
+    }
+  }
   setStatus(data.running);
   renderLogs(data.logs);
 }

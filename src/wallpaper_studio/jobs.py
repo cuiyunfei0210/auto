@@ -36,6 +36,12 @@ async def run_job(
     emit(f"共 {len(images)} 张图片，将依次使用 {len(batches)} 个账号")
     if unused > 0:
         emit(f"账号额度不够，有 {unused} 张图会留到下次")
+    if config.network.proxy_enabled:
+        for batch in batches:
+            exit_label = batch.proxy or "直连"
+            emit(f"账号 {batch.account.username} 出口：{exit_label}")
+    elif len(batches) > 1:
+        emit("未启用代理，本轮多个账号会走当前同一出口。需要分开时请为每个账号准备一个代理。")
 
     uploaded = await upload_batches(
         batches,

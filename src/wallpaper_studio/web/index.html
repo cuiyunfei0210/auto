@@ -81,7 +81,7 @@
             <h2>账号队列</h2>
             <button class="ghost" id="btn-add-account">添加账号</button>
           </div>
-          <p class="hint">按列表顺序登录。当前账号的「上传数量」用完后，自动退出并登录下一个账号。</p>
+          <p class="hint">按列表顺序登录。当前账号的「上传数量」用完后，自动退出并登录下一个账号。每个账号应走不同出口，避免多个账号落在同一个 IP。</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -90,6 +90,7 @@
                   <th>密码</th>
                   <th>上传数量</th>
                   <th>间隔秒</th>
+                  <th>该账号代理</th>
                   <th></th>
                 </tr>
               </thead>
@@ -98,17 +99,23 @@
           </div>
         </article>
         <article class="card">
-          <h2>代理（可选）</h2>
+          <h2>出口 IP</h2>
+          <p class="hint">目的是让每个账号使用不同的网络出口。不启用时代码仍可上传，但本机多个账号会表现为同一个 IP。</p>
           <label class="choice">
             <input type="checkbox" id="proxy_enabled">
-            <span>启用代理；不勾选时直连，不影响上传</span>
+            <span>启用代理，按账号切换出口</span>
           </label>
-          <label>每几个账号换一次代理
-            <input id="rotate_every_accounts" type="number" min="1" value="5">
+          <label class="choice">
+            <input type="checkbox" id="unique_ip_per_account" checked>
+            <span>禁止多个账号共用同一个代理（推荐）</span>
           </label>
-          <label>代理列表，一行一个，例如 http://127.0.0.1:7890
-            <textarea id="proxies" rows="4"></textarea>
+          <label>代理池，一行一个。账号行里没填代理时，按顺序一对一分配
+            <textarea id="proxies" rows="5" placeholder="http://user:pass@1.2.3.4:8080&#10;socks5://2.2.2.2:1080"></textarea>
           </label>
+          <label class="advanced">允许共用时，每几个账号换一次（仅在取消上方「禁止共用」后生效）
+            <input id="rotate_every_accounts" type="number" min="1" value="1">
+          </label>
+          <p class="hint" id="proxy-hint"></p>
         </article>
       </section>
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from wallpaper_studio.jobs import run_job
-from wallpaper_studio.models import Account, AppConfig, PathSettings, SiteProfile
+from wallpaper_studio.models import Account, AppConfig, NetworkSettings, PathSettings, SiteProfile
 from wallpaper_studio.storage import save_config, source_dir
 from tests.helpers import make_png
 
@@ -65,3 +65,28 @@ async def test_job_uploads_one_account_then_switches(studio_home):
     assert uploader.events[1][1] == "demo1"
     assert uploader.events[5][1] == "demo2"
     assert waits == [0.01]
+
+
+async def test_job_gives_each_account_its_own_proxy(studio_home):
+    config = AppConfig(
+        mode="upload_only",
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        site=SiteProfile(),
+        accounts=[
+            Account(username="demo1", password="123123", upload_count=1, interval_seconds=0),
+            Account(username="demo2", password="123123", upload_count=1, interval_seconds=0),
+        ],
+        network=NetworkSettings(
+            proxy_enabled=True,
+            unique_ip_per_account=True,
+            proxies=["http://10.0.0.1:8080", "http://10.0.0.2:8080"],
+        ),
+    )
+    save_config(config)
+    make_png(source_dir(config) / "a.png")
+    make_png(source_dir(config) / "b.png", (10, 20, 30))
+    uploader = RecordingUploader()
+    await run_job(config, uploader=uploader)
+    starts = [event for event in uploader.events if event[0] == "start"]
+    assert starts[0] == ("start", "demo1", "http://10.0.0.1:8080")
+    assert starts[1] == ("start", "demo2", "http://10.0.0.2:8080")

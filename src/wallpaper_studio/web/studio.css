@@ -178,6 +178,9 @@ button.ghost, a.ghost {
 }
 .hidden { display: none; }
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.table-wrap { overflow-x: auto; }
+.acc-proxy { min-width: 180px; }
+#proxy-hint.error, .hint.error { color: var(--danger); }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 6px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; }

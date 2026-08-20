@@ -1,8 +1,14 @@
 from pathlib import Path
 
+import pytest
+
 from wallpaper_studio.files import list_images, sanitize_filename, unique_path
 from wallpaper_studio.models import Account, NetworkSettings
-from wallpaper_studio.scheduler import plan_account_batches, proxy_for_account_index
+from wallpaper_studio.scheduler import (
+    ProxyAssignmentError,
+    plan_account_batches,
+    proxy_for_account_index,
+)
 
 
 def test_sanitize_filename_strips_illegal_chars():
@@ -43,6 +49,7 @@ def test_plan_finishes_one_account_before_next(tmp_path: Path):
 def test_proxy_rotates_every_five_accounts():
     network = NetworkSettings(
         proxy_enabled=True,
+        unique_ip_per_account=False,
         rotate_every_accounts=5,
         proxies=["http://p1", "http://p2"],
     )
@@ -52,3 +59,40 @@ def test_proxy_rotates_every_five_accounts():
     assert proxy_for_account_index(10, network) == "http://p1"
     disabled = NetworkSettings(proxy_enabled=False, proxies=["http://p1"])
     assert proxy_for_account_index(0, disabled) is None
+
+
+def test_unique_ip_assigns_one_proxy_per_account():
+    network = NetworkSettings(
+        proxy_enabled=True,
+        unique_ip_per_account=True,
+        proxies=["http://p1", "http://p2", "http://p3"],
+    )
+    accounts = [
+        Account(username="a", password="p", upload_count=1),
+        Account(username="b", password="p", upload_count=1),
+        Account(username="c", password="p", upload_count=1, proxy="socks5://own:1"),
+    ]
+    batches = plan_account_batches([Path("1.png"), Path("2.png"), Path("3.png")], accounts, network)
+    assert [batch.proxy for batch in batches] == ["http://p1", "http://p2", "socks5://own:1"]
+
+
+def test_unique_ip_rejects_shared_or_missing_proxy():
+    network = NetworkSettings(
+        proxy_enabled=True,
+        unique_ip_per_account=True,
+        proxies=["http://only-one"],
+    )
+    accounts = [
+        Account(username="a", password="p", upload_count=1),
+        Account(username="b", password="p", upload_count=1),
+    ]
+    with pytest.raises(ProxyAssignmentError, match="没有独立出口"):
+        plan_account_batches([Path("1.png"), Path("2.png")], accounts, network)
+
+    same = NetworkSettings(proxy_enabled=True, unique_ip_per_account=True, proxies=[])
+    twins = [
+        Account(username="a", password="p", upload_count=1, proxy="http://same"),
+        Account(username="b", password="p", upload_count=1, proxy="http://same"),
+    ]
+    with pytest.raises(ProxyAssignmentError, match="共用了同一出口"):
+        plan_account_batches([Path("1.png"), Path("2.png")], twins, same)

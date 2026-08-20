@@ -16,6 +16,7 @@ from wallpaper_studio.jobs import run_job
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.storage import load_config, save_config, source_dir, output_dir
 from wallpaper_studio.files import list_images
+from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
@@ -73,6 +74,12 @@ def create_app() -> FastAPI:
         payload["output_count"] = len(list_images(output_dir(config)))
         payload["source_dir"] = str(source_dir(config))
         payload["output_dir"] = str(output_dir(config))
+        try:
+            payload["proxy_assignments"] = preview_proxy_assignments(config.accounts, config.network)
+            payload["proxy_error"] = None
+        except ProxyAssignmentError as exc:
+            payload["proxy_assignments"] = []
+            payload["proxy_error"] = str(exc)
         return JSONResponse(payload)
 
     @app.post("/api/config")
@@ -90,6 +97,10 @@ def create_app() -> FastAPI:
             if state.running:
                 return JSONResponse({"ok": False, "error": "任务正在运行"}, status_code=409)
             config = load_config()
+            try:
+                preview_proxy_assignments(config.accounts, config.network)
+            except ProxyAssignmentError as exc:
+                return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
             state.running = True
             state.last_error = None
             state.last_result = None
