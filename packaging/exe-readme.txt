@@ -17,4 +17,4 @@
 - 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）
 - 配置和图片在 exe 旁边的 data 文件夹
 - 同一台电脑只能开一份
-- 中转站生图报 image_generation / tools 错时，改用「跳过二创」上传原图
+- 中转站 /v1/images 报 image_generation / tools 错时，程序会自动改走对话画图；对话模型用 gpt-5.4-mini

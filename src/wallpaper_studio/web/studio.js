@@ -13,7 +13,7 @@ const siteFields = [
   "category_selector", "category_value", "agree_selector", "submit_selector", "success_text",
 ];
 
-const apiFields = ["base_url", "api_key", "remix_model", "filename_model", "remix_prompt", "filename_prompt", "image_size"];
+const apiFields = ["base_url", "api_key", "remix_chat_model", "remix_model", "filename_model", "remix_prompt", "filename_prompt", "image_size"];
 
 function $(id) { return document.getElementById(id); }
 

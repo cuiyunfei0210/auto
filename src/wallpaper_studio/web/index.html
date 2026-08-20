@@ -60,7 +60,7 @@
               <button class="ghost" id="btn-save">保存设置</button>
             </div>
             <p class="hint" id="path-hint"></p>
-            <p class="hint">二创依赖中转站生图接口。若日志出现 image_generation / tools 报错，请改用「跳过二创」直接上传原图。账号必须先在「账号」页添加。</p>
+            <p class="hint">二创会优先走对话画图接口。账号必须先在「账号」页添加。</p>
           </article>
           <article class="card log-card">
             <h2>运行日志</h2>
@@ -164,12 +164,13 @@
           <h2>中转站 API</h2>
           <label>接口地址<input id="base_url"></label>
           <label>API Key<input id="api_key" type="password" placeholder="sk-…"></label>
-          <label>二创模型<input id="remix_model"></label>
+          <label>二创对话模型（用能聊天的模型，例如 gpt-5.4-mini）<input id="remix_chat_model"></label>
+          <label>生图模型（例如 gpt-image-2）<input id="remix_model"></label>
           <label>文件名模型<input id="filename_model"></label>
           <label>二创提示词<textarea id="remix_prompt" rows="3"></textarea></label>
           <label>文件名提示词（生成上传标题）<textarea id="filename_prompt" rows="3"></textarea></label>
           <label>出图尺寸<input id="image_size"></label>
-          <p class="hint">Key 只保存在本机 data/config.json，不会写进代码仓库。中转站生图通道异常时，请改用「跳过二创」。</p>
+          <p class="hint">Key 只保存在本机 data/config.json。中转站 /v1/images 通道报 image_generation / tools 错时，程序会自动改走 /v1/responses 对话画图。</p>
         </article>
       </section>
     </main>

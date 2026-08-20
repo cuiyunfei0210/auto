@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+import re
 from pathlib import Path
 
 import httpx
 
 from wallpaper_studio.files import sanitize_filename, unique_path
 from wallpaper_studio.models import ApiSettings
+
+_MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+_DATA_URL = re.compile(r"^data:image/([^;]+);base64,(.+)$", re.DOTALL | re.IGNORECASE)
 
 
 class ApiError(RuntimeError):
@@ -17,15 +21,15 @@ class ApiError(RuntimeError):
 def friendly_error_message(raw: str) -> str:
     """Turn known relay/API failures into an actionable Chinese explanation."""
     text = (raw or "").strip()
-    if "中转站生图接口坏了" in text or "中转站已关闭批量生图" in text:
+    if "中转站的 /v1/images" in text or "中转站生图接口" in text or "中转站已关闭批量生图" in text:
         return text
     lowered = text.lower()
     if "image_generation" in lowered and "tools" in lowered:
         return (
-            "中转站生图接口坏了：对方返回 Tool choice 'image_generation' not found in 'tools' parameter。"
-            "这不是电脑故障，也不是壁纸工坊崩溃。"
-            "请先改成「跳过二创，直接上传源文件夹」，把原图传到 cqwall；"
-            "等中转站修好 gpt-image 再开二创。"
+            "中转站的 /v1/images 生图通道仍在报 Tool choice 'image_generation' not found in 'tools' parameter。"
+            "程序已改走 /v1/responses 对话画图（带 tools），若仍然失败，请把「二创对话模型」留成 gpt-5.4-mini 这类能聊天的模型，"
+            "不要把 gpt-image-2 填进对话模型；并确认 Key 所在分组的上游账号开通了画图。"
+            "实在不行再暂时改用「跳过二创」。"
         )
     if "batch_image_disabled" in lowered or "batch image" in lowered:
         return (
@@ -34,10 +38,31 @@ def friendly_error_message(raw: str) -> str:
     return text or "未知错误"
 
 
+def official_image_size(value: str) -> str:
+    text = (value or "").strip() or "1024x1024"
+    key = text.lower().replace(" ", "").replace("×", "x")
+    mapping = {
+        "1k": "1024x1024",
+        "2k": "1536x1024",
+        "4k": "1536x1024",
+        "auto": "auto",
+        "square": "1024x1024",
+        "portrait": "1024x1536",
+        "landscape": "1536x1024",
+    }
+    return mapping.get(key, text.replace("×", "x"))
+
+
 class RelayClient:
-    def __init__(self, settings: ApiSettings, timeout: float = 180.0) -> None:
+    def __init__(
+        self,
+        settings: ApiSettings,
+        timeout: float = 240.0,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
         self.settings = settings
         self.timeout = timeout
+        self.transport = transport
 
     def _headers(self) -> dict[str, str]:
         key = self.settings.api_key.strip()
@@ -50,6 +75,25 @@ class RelayClient:
 
     def _url(self, path: str) -> str:
         return self.settings.base_url.rstrip("/") + path
+
+    def _chat_model(self) -> str:
+        return (
+            self.settings.remix_chat_model.strip()
+            or self.settings.filename_model.strip()
+            or "gpt-5.4-mini"
+        )
+
+    def _post_json(self, path: str, payload: dict) -> dict:
+        kwargs: dict = {"timeout": self.timeout}
+        if self.transport is not None:
+            kwargs["transport"] = self.transport
+        with httpx.Client(**kwargs) as client:
+            response = client.post(
+                self._url(path),
+                headers=self._headers(),
+                json=payload,
+            )
+        return _json_or_error(response)
 
     def generate_title(self, original_stem: str) -> str:
         prompt = self.settings.filename_prompt.strip() or "Generate a short wallpaper title."
@@ -67,13 +111,7 @@ class RelayClient:
             ],
             "max_tokens": 64,
         }
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(
-                self._url("/v1/chat/completions"),
-                headers=self._headers(),
-                json=payload,
-            )
-        data = _json_or_error(response)
+        data = self._post_json("/v1/chat/completions", payload)
         try:
             text = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
@@ -85,24 +123,90 @@ class RelayClient:
         raw = source.read_bytes()
         encoded = base64.b64encode(raw).decode("ascii")
         data_url = f"data:{mime};base64,{encoded}"
-        payload = {
-            "model": self.settings.remix_model,
-            "prompt": self.settings.remix_prompt,
-            "image_size": self.settings.image_size,
-            "size": self.settings.image_size,
-            "images": [{"image_url": data_url, "mime_type": mime}],
+        errors: list[str] = []
+        for path, payload in self._remix_requests(data_url, mime):
+            try:
+                data = self._post_json(path, payload)
+                image_bytes, suffix = extract_image_payload(data, source.suffix)
+            except ApiError as exc:
+                errors.append(f"{path}: {exc}")
+                continue
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = unique_path(dest_dir, title, suffix)
+            dest.write_bytes(image_bytes)
+            return dest
+        combined = " | ".join(errors) if errors else "未知错误"
+        raise ApiError(friendly_error_message(combined))
+
+    def _remix_requests(self, data_url: str, mime: str) -> list[tuple[str, dict]]:
+        prompt = self.settings.remix_prompt.strip() or "Restyle this image as a desktop wallpaper."
+        prompt = (
+            "You must generate an edited wallpaper image from the reference photo. "
+            "Do not reply with text only.\n"
+            + prompt
+        )
+        chat_model = self._chat_model()
+        image_model = self.settings.remix_model.strip() or "gpt-image-2"
+        size = official_image_size(self.settings.image_size)
+        raw_size = self.settings.image_size.strip() or size
+        tool = {
+            "type": "image_generation",
+            "action": "edit",
+            "size": size,
         }
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(
-                self._url("/v1/images/edits"),
-                headers=self._headers(),
-                json=payload,
-            )
-        data = _json_or_error(response)
-        image_bytes, suffix = _extract_image(data, source.suffix)
-        dest = unique_path(dest_dir, title, suffix)
-        dest.write_bytes(image_bytes)
-        return dest
+        return [
+            (
+                "/v1/responses",
+                {
+                    "model": chat_model,
+                    "input": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": prompt},
+                                {
+                                    "type": "input_image",
+                                    "image_url": data_url,
+                                    "detail": "auto",
+                                },
+                            ],
+                        }
+                    ],
+                    "tools": [tool],
+                    "tool_choice": "auto",
+                },
+            ),
+            (
+                "/v1/chat/completions",
+                {
+                    "model": chat_model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": data_url}},
+                            ],
+                        }
+                    ],
+                    "tools": [{"type": "image_generation", "size": size}],
+                    "tool_choice": "auto",
+                    "modalities": ["text", "image"],
+                },
+            ),
+            (
+                "/v1/images/edits",
+                {
+                    "model": image_model,
+                    "prompt": prompt,
+                    "image_size": raw_size,
+                    "size": raw_size,
+                    "images": [{"image_url": data_url, "mime_type": mime}],
+                    "tools": [tool],
+                    "tool_choice": "auto",
+                },
+            ),
+        ]
 
 
 def _json_or_error(response: httpx.Response) -> dict:
@@ -127,18 +231,94 @@ def _error_message(data: dict) -> str:
     return str(data.get("message") or "")
 
 
-def _extract_image(data: dict, fallback_suffix: str) -> tuple[bytes, str]:
-    items = data.get("data")
-    if isinstance(items, list) and items:
-        item = items[0]
-        if isinstance(item, dict):
-            b64 = item.get("b64_json") or item.get("b64")
-            if b64:
-                return base64.b64decode(b64), fallback_suffix or ".png"
-            url = item.get("url")
-            if url:
-                image = httpx.get(url, timeout=60.0)
-                image.raise_for_status()
-                suffix = Path(url.split("?")[0]).suffix or fallback_suffix or ".png"
-                return image.content, suffix
+def extract_image_payload(data: dict, fallback_suffix: str) -> tuple[bytes, str]:
+    found = _first_image_bytes(data)
+    if found:
+        return found[0], found[1] or fallback_suffix or ".png"
     raise ApiError("生图接口没有返回图片数据。")
+
+
+def _first_image_bytes(data: object) -> tuple[bytes, str] | None:
+    if isinstance(data, dict):
+        items = data.get("data")
+        if isinstance(items, list):
+            for item in items:
+                found = _image_from_mapping(item) if isinstance(item, dict) else None
+                if found:
+                    return found
+        for item in data.get("output") or []:
+            found = _first_image_bytes(item)
+            if found:
+                return found
+        if data.get("type") == "image_generation_call" or data.get("result"):
+            found = _image_from_mapping(data)
+            if found:
+                return found
+        message = data.get("choices")
+        if isinstance(message, list):
+            for choice in message:
+                if isinstance(choice, dict):
+                    found = _first_image_bytes(choice.get("message") or choice)
+                    if found:
+                        return found
+        for key in ("message", "content", "images"):
+            if key in data:
+                found = _first_image_bytes(data.get(key))
+                if found:
+                    return found
+        found = _image_from_mapping(data)
+        if found:
+            return found
+    if isinstance(data, list):
+        for item in data:
+            found = _first_image_bytes(item)
+            if found:
+                return found
+    if isinstance(data, str):
+        return _image_from_text(data)
+    return None
+
+
+def _image_from_mapping(item: dict) -> tuple[bytes, str] | None:
+    for key in ("b64_json", "b64", "result"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            decoded = _decode_image_text(value, allow_short=True)
+            if decoded:
+                return decoded
+    url = item.get("url") or item.get("image_url")
+    if isinstance(url, dict):
+        url = url.get("url")
+    if isinstance(url, str) and url.strip():
+        return _image_from_text(url)
+    return None
+
+
+def _image_from_text(text: str) -> tuple[bytes, str] | None:
+    match = _MD_IMAGE.search(text)
+    if match:
+        return _image_from_text(match.group(1).strip(" '\""))
+    return _decode_image_text(text)
+
+
+def _decode_image_text(text: str, allow_short: bool = False) -> tuple[bytes, str] | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    data_url = _DATA_URL.match(raw)
+    if data_url:
+        suffix = "." + data_url.group(1).lower().replace("jpeg", "jpg")
+        return base64.b64decode(data_url.group(2)), suffix
+    if raw.startswith("http://") or raw.startswith("https://"):
+        image = httpx.get(raw, timeout=60.0)
+        image.raise_for_status()
+        suffix = Path(raw.split("?")[0]).suffix or ".png"
+        return image.content, suffix
+    if (allow_short or len(raw) > 80) and re.fullmatch(r"[A-Za-z0-9+/=\s]+", raw):
+        try:
+            blob = base64.b64decode(raw)
+        except Exception:
+            return None
+        if blob:
+            return blob, ".png"
+    return None

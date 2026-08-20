@@ -9,6 +9,7 @@ class ApiSettings(BaseModel):
     base_url: str = "https://api.newxxt.top"
     api_key: str = ""
     remix_model: str = "gpt-image-2"
+    remix_chat_model: str = "gpt-5.4-mini"
     filename_model: str = "gpt-5.4-mini"
     remix_prompt: str = "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details."
     filename_prompt: str = "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes."
