@@ -99,13 +99,49 @@ function setStatus(running) {
   const pill = $("status-pill");
   pill.textContent = running ? "运行中" : "空闲";
   pill.classList.toggle("live", running);
-  $("btn-start").disabled = Boolean(running);
   $("btn-stop").disabled = !running;
 }
 
-function renderLogs(lines) {
-  $("log").textContent = (lines || []).join("\n");
-  $("log").scrollTop = $("log").scrollHeight;
+function notify(message) {
+  const text = String(message || "").trim() || "发生了未知问题。";
+  window.alert(text);
+}
+
+function localStartProblems(cfg) {
+  const problems = [];
+  if (!cfg.accounts.length) {
+    problems.push("还没有账号。请到「账号」页填写 CQwall 邮箱和密码。");
+  }
+  const sourceCount = Number($("source-count").textContent || 0);
+  if (!Number.isFinite(sourceCount) || sourceCount <= 0) {
+    problems.push("源文件夹里没有图片。请到「文件夹」确认源目录，并放入 png/jpg 图片。");
+  }
+  if (cfg.mode === "remix_then_upload") {
+    if (!(cfg.api.base_url || "").trim()) {
+      problems.push("二创模式需要填写中转站接口地址，例如 https://xmapi.site。");
+    }
+    if (!(cfg.api.api_key || "").trim() && !((cfg.api.username || "").trim() && cfg.api.password)) {
+      problems.push("二创模式需要 API Key，或中转站邮箱和密码。请到「二创 API」填写。");
+    }
+    if (!(cfg.api.remix_model || "").trim()) {
+      problems.push("二创模式需要填写生图模型，当前这组 Key 一般用 gpt-image-2。");
+    }
+  }
+  if (cfg.network.proxy_enabled && cfg.network.unique_ip_per_account && cfg.accounts.length > (cfg.network.proxies || []).length) {
+    const missing = cfg.accounts.filter((item) => !(item.proxy || "").trim()).length;
+    if (missing && cfg.network.proxies.length < missing) {
+      problems.push("已开启一人一代理，但代理不够。请到「账号」页补代理。");
+    }
+  }
+  return problems;
+}
+
+function formatErrorPayload(data) {
+  if (!data) return "无法开始";
+  if (typeof data.error === "string" && data.error.trim()) return data.error;
+  if (Array.isArray(data.problems) && data.problems.length) return data.problems.join("\n");
+  if (Array.isArray(data.error)) return "保存失败，请检查账号和数字是否填完整";
+  return "无法开始";
 }
 
 let presets = {};
@@ -146,16 +182,17 @@ async function refresh() {
   renderLogs(data.logs);
 }
 
-async function saveConfig() {
+async function saveConfig({ silent = false } = {}) {
   const res = await fetch("/api/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(collectConfig()),
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    alert("保存失败，请检查账号和数字是否填完整");
-    return data;
+    const message = "保存失败，请检查账号和数字是否填完整。";
+    if (!silent) notify(message);
+    return { ok: false, error: message, ...data };
   }
   await refresh();
   return data;
@@ -174,24 +211,58 @@ document.querySelectorAll("aside nav button").forEach((button) => {
 });
 
 $("btn-add-account").onclick = () => $("account-rows").appendChild(accountRow());
-$("btn-save").onclick = saveConfig;
+$("btn-save").onclick = async () => {
+  const data = await saveConfig();
+  if (data && data.ok === false) return;
+  notify("设置已保存。");
+};
 $("btn-start").onclick = async () => {
-  if ($("btn-start").disabled) return;
-  $("btn-start").disabled = true;
-  await saveConfig();
-  const res = await fetch("/api/start", { method: "POST" });
-  const data = await res.json();
-  if (!res.ok) {
-    if (res.status !== 409) $("btn-start").disabled = false;
-    setStatus(res.status === 409);
-    alert(data.error || "无法开始");
+  const running = $("status-pill").classList.contains("live");
+  if (running) {
+    notify("任务正在运行。请先点「停止」，或等当前任务结束后再开始。");
     return;
   }
-  setStatus(true);
-  renderLogs(data.logs || ["任务已开始"]);
+  if ($("btn-start").dataset.busy === "1") {
+    notify("正在提交开始请求，请稍等。");
+    return;
+  }
+  const cfg = collectConfig();
+  const local = localStartProblems(cfg);
+  if (local.length) {
+    notify(local.length === 1 ? local[0] : `还不能开始，请先处理：\n${local.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
+    return;
+  }
+  $("btn-start").dataset.busy = "1";
+  try {
+    const saved = await saveConfig({ silent: true });
+    if (!saved || saved.ok === false) {
+      notify(formatErrorPayload(saved) === "无法开始" ? "保存失败，请检查账号和数字是否填完整。" : formatErrorPayload(saved));
+      return;
+    }
+    const res = await fetch("/api/start", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatus(res.status === 409);
+      notify(formatErrorPayload(data));
+      return;
+    }
+    setStatus(true);
+    renderLogs(data.logs || ["任务已开始"]);
+    notify("任务已开始。请看右侧运行日志；二创每张图可能要几十秒。");
+  } catch (err) {
+    setStatus(false);
+    notify(`无法开始：${err && err.message ? err.message : err}`);
+  } finally {
+    $("btn-start").dataset.busy = "0";
+  }
 };
 $("btn-stop").onclick = async () => {
-  await fetch("/api/stop", { method: "POST" });
+  try {
+    await fetch("/api/stop", { method: "POST" });
+    notify("已发送停止请求。请看右侧运行日志。");
+  } catch (err) {
+    notify(`停止失败：${err && err.message ? err.message : err}`);
+  }
 };
 
 if ($("site_preset")) {
@@ -209,8 +280,16 @@ function connectWs() {
     const payload = JSON.parse(event.data);
     if (payload.type === "hello" || payload.type === "reset" || payload.type === "done") {
       renderLogs(payload.logs || []);
-      if (payload.type === "done") setStatus(false);
-      else if ("running" in payload) setStatus(Boolean(payload.running));
+      if (payload.type === "done") {
+        setStatus(false);
+        if (payload.last_error) notify(`任务失败：\n${payload.last_error}`);
+        else if (payload.last_result) {
+          const uploaded = payload.last_result.uploaded;
+          notify(`任务完成：成功上传 ${uploaded} 张。`);
+        } else {
+          notify("任务已结束。请看右侧运行日志。");
+        }
+      } else if ("running" in payload) setStatus(Boolean(payload.running));
       return;
     }
     if (payload.message) {

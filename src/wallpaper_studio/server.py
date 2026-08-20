@@ -20,6 +20,7 @@ from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assig
 from wallpaper_studio.sites import SITE_PRESETS
 from wallpaper_studio.paths import archive_temp_warning, web_dir
 from wallpaper_studio.relay import friendly_error_message
+from wallpaper_studio.preflight import format_start_problems, start_problems
 
 WEB_DIR = web_dir()
 
@@ -116,18 +117,16 @@ def create_app() -> FastAPI:
             if state.running:
                 return JSONResponse({"ok": False, "error": "任务正在运行"}, status_code=409)
             config = load_config()
-            if not config.accounts:
+            problems = start_problems(config)
+            if problems:
                 return JSONResponse(
                     {
                         "ok": False,
-                        "error": "还没有添加账号。请先到「账号」页填 cqwall 邮箱和密码，再开始任务。",
+                        "error": format_start_problems(problems),
+                        "problems": problems,
                     },
                     status_code=400,
                 )
-            try:
-                preview_proxy_assignments(config.accounts, config.network)
-            except ProxyAssignmentError as exc:
-                return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
             state.running = True
             state.last_error = None
             state.last_result = None

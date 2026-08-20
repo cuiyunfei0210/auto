@@ -20,3 +20,7 @@ def test_windows_packaging_files_exist():
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
     assert "WallpaperStudio.exe" in text
     assert "PLAYWRIGHT_BROWSERS_PATH" in text
+    ui = (root / "src" / "wallpaper_studio" / "web" / "studio.js").read_text(encoding="utf-8")
+    assert "function notify(" in ui
+    assert "localStartProblems" in ui
+    assert "任务已开始" in ui
