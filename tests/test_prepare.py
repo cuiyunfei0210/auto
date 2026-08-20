@@ -29,3 +29,23 @@ def test_prepare_translates_image_generation_error(studio_home, monkeypatch):
 
     with pytest.raises(ApiError, match="跳过二创"):
         prepare_images(config)
+
+
+def test_prepare_skips_title_api_for_image_models(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="upload_only",
+        api=ApiSettings(api_key="sk-test", filename_model="gpt-image-2"),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(source_dir(config) / "night.png")
+    logs: list[str] = []
+
+    def boom(self, stem):
+        raise AssertionError("title API should not be called for gpt-image-2")
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.generate_title", boom)
+    prepared = prepare_images(config, logs.append)
+    assert prepared[0].name.startswith("night")
+    assert any("不能写标题" in line for line in logs)

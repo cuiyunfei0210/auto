@@ -62,7 +62,7 @@ def cqwall_site() -> SiteProfile:
     return SiteProfile(
         login_url="https://www.cqwall.com/",
         upload_url="https://www.cqwall.com/index/index/center.html",
-        open_login_selector='a[lay-on="page-login"]',
+        open_login_selector='.header .login a[lay-on="page-login"]',
         username_selector='#layer-user input[name="email"]',
         password_selector='#layer-user input[name="password"]',
         login_button_selector='#layer-user button[lay-filter="login"]',

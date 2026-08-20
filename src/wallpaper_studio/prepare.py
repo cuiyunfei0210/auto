@@ -6,7 +6,7 @@ from shutil import copy2
 
 from wallpaper_studio.files import list_images, sanitize_filename, unique_path
 from wallpaper_studio.models import AppConfig
-from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message
+from wallpaper_studio.relay import ApiError, RelayClient, chat_model_supports_titles, friendly_error_message
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
@@ -27,10 +27,24 @@ def prepare_images(config: AppConfig, log: LogFn | None = None) -> list[Path]:
 
     prepared: list[Path] = []
     client = RelayClient(config.api) if _needs_api(config) else None
+    can_rename = (
+        client is not None
+        and config.api.filename_prompt.strip()
+        and chat_model_supports_titles(config.api.filename_model)
+    )
+    if (
+        client is not None
+        and config.api.filename_prompt.strip()
+        and not can_rename
+    ):
+        emit(
+            f"文件名模型 {config.api.filename_model} 不能写标题，全部沿用原文件名"
+        )
 
     for image in images:
         title = image.stem
-        if client is not None and config.api.filename_prompt.strip():
+        if can_rename:
+            assert client is not None
             try:
                 title = client.generate_title(image.stem)
                 emit(f"新文件名：{title}")

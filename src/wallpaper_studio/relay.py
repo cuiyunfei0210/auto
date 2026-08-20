@@ -92,6 +92,15 @@ def resolve_api_key(settings: ApiSettings, transport: httpx.BaseTransport | None
         return str(active[0])
 
 
+def chat_model_supports_titles(model: str) -> bool:
+    """gpt-image-2 and similar image models reject /v1/chat/completions."""
+    name = (model or "").strip().lower()
+    if not name:
+        return False
+    markers = ("image", "dall-e", "dalle", "flux", "midjourney", "stable-diffusion", "sdxl")
+    return not any(token in name for token in markers)
+
+
 def official_image_size(value: str) -> str:
     text = (value or "").strip() or "1024x1024"
     key = text.lower().replace(" ", "").replace("×", "x")
@@ -137,8 +146,8 @@ class RelayClient:
             or "gpt-image-2"
         )
 
-    def _post_json(self, path: str, payload: dict) -> dict:
-        kwargs: dict = {"timeout": self.timeout}
+    def _post_json(self, path: str, payload: dict, timeout: float | None = None) -> dict:
+        kwargs: dict = {"timeout": self.timeout if timeout is None else timeout}
         if self.transport is not None:
             kwargs["transport"] = self.transport
         with httpx.Client(**kwargs) as client:
@@ -150,6 +159,10 @@ class RelayClient:
         return _json_or_error(response)
 
     def generate_title(self, original_stem: str) -> str:
+        if not chat_model_supports_titles(self.settings.filename_model):
+            raise ApiError(
+                f"文件名模型 {self.settings.filename_model} 不支持对话接口，无法自动起名。"
+            )
         prompt = self.settings.filename_prompt.strip() or "Generate a short wallpaper title."
         payload = {
             "model": self.settings.filename_model,
@@ -165,7 +178,7 @@ class RelayClient:
             ],
             "max_tokens": 64,
         }
-        data = self._post_json("/v1/chat/completions", payload)
+        data = self._post_json("/v1/chat/completions", payload, timeout=20.0)
         try:
             text = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:

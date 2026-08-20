@@ -7,6 +7,7 @@ import httpx
 from wallpaper_studio.models import ApiSettings
 from wallpaper_studio.relay import (
     RelayClient,
+    chat_model_supports_titles,
     extract_image_payload,
     friendly_error_message,
     official_image_size,
@@ -141,3 +142,9 @@ def test_resolves_api_key_by_logging_into_relay(tmp_path: Path):
     assert dest.exists()
     assert any(item.endswith("/api/v1/auth/login") for item in seen)
     assert any(item.endswith("/api/v1/keys") for item in seen)
+
+
+def test_image_models_are_not_used_for_chat_titles():
+    assert chat_model_supports_titles("gpt-4o-mini")
+    assert not chat_model_supports_titles("gpt-image-2")
+    assert not chat_model_supports_titles("")

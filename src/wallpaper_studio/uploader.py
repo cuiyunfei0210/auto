@@ -3,7 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable, Awaitable
 from pathlib import Path
 
-from wallpaper_studio.browser import chromium_launch_attempts, configure_playwright_env
+from wallpaper_studio.browser import (
+    browser_context_options,
+    chromium_launch_attempts,
+    click_even_if_offscreen,
+    configure_playwright_env,
+)
 from wallpaper_studio.models import Account, AccountBatch, SiteProfile
 from wallpaper_studio.sites import map_category
 
@@ -48,16 +53,24 @@ class BrowserUploader:
                 "请重新下载解压完整的 WallpaperStudio 文件夹，或在这台电脑安装 Microsoft Edge / Google Chrome。"
                 f" 原始错误：{launch_error}"
             ) from launch_error
-        self._context = await self._browser.new_context()
+        self._context = await self._browser.new_context(**browser_context_options())
         self._page = await self._context.new_page()
         self._page.set_default_timeout(self.site.navigation_timeout_ms)
+        self.log("正在打开登录页…")
         await self._page.goto(self.site.login_url, wait_until="domcontentloaded")
         if self.site.open_login_selector:
-            await self._page.locator(self.site.open_login_selector).first.click()
+            self.log("正在打开登录窗口…")
+            await click_even_if_offscreen(
+                self._page.locator(self.site.open_login_selector).first,
+                self.site.navigation_timeout_ms,
+            )
             await self._page.locator(self.site.username_selector).first.wait_for(state="visible")
         await self._page.locator(self.site.username_selector).first.fill(account.username)
         await self._page.locator(self.site.password_selector).first.fill(account.password)
-        await self._page.locator(self.site.login_button_selector).first.click()
+        await click_even_if_offscreen(
+            self._page.locator(self.site.login_button_selector).first,
+            self.site.navigation_timeout_ms,
+        )
         if self.site.login_success_text:
             await self._page.get_by_text(self.site.login_success_text, exact=False).first.wait_for()
         else:
@@ -75,7 +88,10 @@ class BrowserUploader:
         page = self._page
         await page.goto(self.site.upload_url, wait_until="domcontentloaded")
         if self.site.open_upload_selector:
-            await page.locator(self.site.open_upload_selector).first.click()
+            await click_even_if_offscreen(
+                page.locator(self.site.open_upload_selector).first,
+                self.site.navigation_timeout_ms,
+            )
             if self.site.title_selector:
                 await page.locator(self.site.title_selector).first.wait_for(state="visible")
         await page.locator(self.site.file_input_selector).first.set_input_files(str(image))
@@ -109,7 +125,10 @@ class BrowserUploader:
                 await locator.fill(mapped or raw_category)
         if self.site.agree_selector:
             await _check_agreements(page, self.site.agree_selector)
-        await page.locator(self.site.submit_selector).first.click()
+        await click_even_if_offscreen(
+            page.locator(self.site.submit_selector).first,
+            self.site.navigation_timeout_ms,
+        )
         await _wait_upload_result(page, self.site)
         self.log(f"已上传 {image.name}（标题：{title}）")
 
