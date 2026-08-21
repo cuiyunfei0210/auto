@@ -146,6 +146,33 @@ def test_remix_clears_leftover_output_so_count_matches_source(studio_home, monke
     assert any("上次留下" in line for line in logs)
 
 
+def test_prepare_skips_duplicate_nested_source(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="remix_then_upload",
+        api=ApiSettings(api_key="sk-test", filename_prompt=""),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=3, interval_seconds=0)],
+    )
+    save_config(config)
+    original = make_png(studio_home / "source" / "ce8257.jpg")
+    nested = studio_home / "source" / "backup"
+    nested.mkdir()
+    (nested / "ce8257.jpg").write_bytes(original.read_bytes())
+    seen: list[str] = []
+
+    def fake_remix(self, source, dest_dir, title):
+        seen.append(source.name)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{title}.png"
+        path.write_bytes(source.read_bytes())
+        return path
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
+    prepared = prepare_images(config)
+    assert seen == ["ce8257.jpg"]
+    assert len(prepared) == 1
+
+
 def test_prepare_sends_image_to_title_model(studio_home, monkeypatch):
     config = AppConfig(
         mode="upload_only",

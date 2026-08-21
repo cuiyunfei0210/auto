@@ -118,7 +118,7 @@ def create_app() -> FastAPI:
             src, src_note = source_dir_status(config)
             dest, dest_note = output_dir_status(config)
             try:
-                images = list_images(src)
+                images = list_images(src, exclude_roots=[dest])
             except Exception as exc:  # noqa: BLE001
                 images = []
                 src_note = src_note or f"无法扫描源目录 {src}：{exc}"
@@ -204,8 +204,9 @@ def create_app() -> FastAPI:
             state.logs = []
             if config.mode == "remix_then_upload":
                 src, _note = source_dir_status(config)
+                dest, _dest_note = output_dir_status(config)
                 try:
-                    pending = len(list_images(src))
+                    pending = len(list_images(src, exclude_roots=[dest]))
                 except Exception:
                     pending = 0
                 state.remix_remaining = pending

@@ -4,7 +4,7 @@ from wallpaper_studio.files import empty_source_message, list_images
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.paths import archive_temp_warning
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
-from wallpaper_studio.storage import source_dir
+from wallpaper_studio.storage import output_dir, source_dir
 
 
 def start_problems(config: AppConfig) -> list[str]:
@@ -20,7 +20,7 @@ def start_problems(config: AppConfig) -> list[str]:
     if not (config.site.username_selector or "").strip() or not (config.site.password_selector or "").strip():
         problems.append("网页上传的账号或密码选择器是空的。请到「网页上传」检查。")
     src = source_dir(config)
-    images = list_images(src)
+    images = list_images(src, exclude_roots=[output_dir(config)])
     if not images:
         problems.append(empty_source_message(src))
     if config.mode == "remix_then_upload":

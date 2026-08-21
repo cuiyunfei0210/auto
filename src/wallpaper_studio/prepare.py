@@ -24,7 +24,7 @@ def prepare_images(
     emit = log or (lambda _message: None)
     src = source_dir(config)
     dest = output_dir(config)
-    images = list_images(src)
+    images = list_images(src, exclude_roots=[dest])
     if not images:
         raise FileNotFoundError(empty_source_message(src))
 
@@ -61,6 +61,10 @@ def prepare_images(
 
     for image in images:
         title = image.stem
+        try:
+            label = str(image.relative_to(src))
+        except ValueError:
+            label = image.name
         if can_rename:
             assert title_client is not None
             try:
@@ -73,15 +77,15 @@ def prepare_images(
         title = sanitize_filename(title, fallback=image.stem)
         if config.mode == "remix_then_upload":
             assert remix_client is not None
-            emit(f"正在二创 {image.name} …")
+            emit(f"正在二创 {label} …")
             try:
                 remixed = remix_client.remix_image(image, dest, title)
             except ApiError as exc:
                 raise ApiError(
-                    f"{image.name} 二创失败。{friendly_error_message(str(exc))}"
+                    f"{label} 二创失败。{friendly_error_message(str(exc))}"
                 ) from exc
             prepared.append(PreparedImage(path=remixed, title=title))
-            emit(f"已保存二创结果 {remixed.name}")
+            emit(f"已保存二创结果 {remixed.name}（标题：{title}）")
             remaining -= 1
             if progress:
                 progress(remaining, total)

@@ -33,6 +33,29 @@ def test_list_images_finds_nested_and_jfif(tmp_path: Path):
     assert names == ["shot.jfif"]
 
 
+def test_list_images_skips_duplicate_name_and_output_folder(tmp_path: Path):
+    (tmp_path / "ce8257.jpg").write_bytes(b"same-bytes")
+    nested = tmp_path / "backup"
+    nested.mkdir()
+    (nested / "ce8257.jpg").write_bytes(b"same-bytes")
+    remix_dir = tmp_path / "二创"
+    remix_dir.mkdir()
+    (remix_dir / "old.png").write_bytes(b"old")
+    names = [path.name for path in list_images(tmp_path)]
+    assert names == ["ce8257.jpg"]
+
+
+def test_list_images_excludes_output_root(tmp_path: Path):
+    source = tmp_path / "图片"
+    output = source / "out"
+    source.mkdir()
+    output.mkdir()
+    (source / "one.jpg").write_bytes(b"a")
+    (output / "two.png").write_bytes(b"b")
+    names = [path.name for path in list_images(source, exclude_roots=[output])]
+    assert names == ["one.jpg"]
+
+
 def test_empty_source_message_lists_other_files(tmp_path: Path):
     (tmp_path / "readme.txt").write_text("x", encoding="utf-8")
     text = empty_source_message(tmp_path)

@@ -17,21 +17,45 @@ IMAGE_SUFFIXES = {
     ".heic",
     ".heif",
 }
-SKIP_DIR_NAMES = {".git", "__pycache__", "node_modules", ".venv", "__macosx"}
+SKIP_DIR_NAMES = {
+    ".git",
+    "__pycache__",
+    "node_modules",
+    ".venv",
+    "__macosx",
+    "二创",
+    "output",
+    "remixed",
+    "remix",
+}
 UNSAFE_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 MAX_SCAN_DEPTH = 6
 MAX_IMAGES = 2000
 
 
-def list_images(folder: Path) -> list[Path]:
+def _resolved(path: Path) -> Path:
+    try:
+        return path.resolve()
+    except OSError:
+        return path
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        _resolved(path).relative_to(_resolved(root))
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def list_images(folder: Path, exclude_roots: list[Path] | None = None) -> list[Path]:
     if not folder.exists() or not folder.is_dir():
         return []
-    root = folder
-    try:
-        root = folder.resolve()
-    except OSError:
-        root = folder
+    root = _resolved(folder)
+    blocked = [_resolved(item) for item in (exclude_roots or []) if item]
     found: list[Path] = []
+    seen_paths: set[str] = set()
+    seen_fingerprints: set[tuple[str, int]] = set()
     scanned = 0
     try:
         iterator = root.rglob("*")
@@ -55,6 +79,21 @@ def list_images(folder: Path) -> list[Path]:
             continue
         if path.suffix.lower() not in IMAGE_SUFFIXES:
             continue
+        resolved = _resolved(path)
+        if any(_is_under(resolved, item) for item in blocked):
+            continue
+        key = str(resolved).lower()
+        if key in seen_paths:
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = -1
+        fingerprint = (path.name.lower(), size)
+        if fingerprint in seen_fingerprints:
+            continue
+        seen_paths.add(key)
+        seen_fingerprints.add(fingerprint)
         found.append(path)
         if len(found) >= MAX_IMAGES:
             break
