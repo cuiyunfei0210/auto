@@ -195,3 +195,36 @@ def test_prepare_sends_image_to_title_model(studio_home, monkeypatch):
     assert seen["image"] == source
     assert prepared[0].title == "红旗街景黄昏"
     assert prepared[0].path == source
+
+
+def test_prepare_stops_before_the_next_image(studio_home, monkeypatch):
+    from wallpaper_studio.control import JobStopped
+
+    config = AppConfig(
+        mode="remix_then_upload",
+        api=ApiSettings(api_key="sk-test", filename_prompt=""),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=3, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(studio_home / "source" / "one.png")
+    make_png(studio_home / "source" / "two.png", (10, 20, 30))
+    seen: list[str] = []
+
+    def fake_remix(self, source, dest_dir, title):
+        seen.append(source.name)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{title}.png"
+        path.write_bytes(source.read_bytes())
+        return path
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
+    logs: list[str] = []
+
+    def stop_after_first() -> bool:
+        return len(seen) >= 1
+
+    with pytest.raises(JobStopped, match="已手动停止"):
+        prepare_images(config, logs.append, stop_check=stop_after_first)
+    assert seen == ["one.png"] or len(seen) == 1
+    assert any("已停止" in line for line in logs)

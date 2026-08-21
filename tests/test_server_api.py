@@ -1,3 +1,5 @@
+import threading
+
 from fastapi.testclient import TestClient
 
 from wallpaper_studio.demo_site import reset_demo_sessions
@@ -14,6 +16,9 @@ def test_home_and_config_roundtrip(studio_home):
     assert js.status_code == 200
     assert "function renderLogs" in js.text
     assert "function notify" in js.text
+    assert "function appendLog" in js.text
+    assert "正在发送停止请求" in js.text
+    assert '$("btn-stop").disabled' not in js.text
     assert "charset=utf-8" in (js.headers.get("content-type") or "").lower()
     health = client.get("/api/health")
     assert health.status_code == 200
@@ -221,3 +226,65 @@ def test_state_error_payload_is_json(studio_home, monkeypatch):
     body = response.json()
     assert body["source_count"] == 0
     assert "scan exploded" in (body.get("source_note") or "")
+
+
+def test_stop_without_a_job_logs_feedback(studio_home):
+    from wallpaper_studio.server import state as studio_state
+
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    stopped = client.post("/api/stop")
+    assert stopped.status_code == 200
+    body = stopped.json()
+    assert body["ok"] is True
+    assert body["stopping"] is False
+    assert "没有正在运行" in body["message"]
+    assert any("没有正在运行" in line for line in studio_state.logs)
+
+
+def test_stop_cancels_a_running_prepare_loop(studio_home, monkeypatch):
+    import time
+
+    from tests.helpers import make_png
+    from wallpaper_studio.control import JobStopped
+    from wallpaper_studio.models import Account, ApiSettings, AppConfig, PathSettings
+    from wallpaper_studio.server import state as studio_state
+    from wallpaper_studio.storage import save_config
+
+    save_config(
+        AppConfig(
+            mode="upload_only",
+            api=ApiSettings(filename_prompt=""),
+            paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+            accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+        )
+    )
+    make_png(studio_home / "source" / "a.png")
+    entered = threading.Event()
+
+    def hanging_prepare(config, log=None, progress=None, stop_check=None):
+        entered.set()
+        deadline = time.time() + 8
+        while time.time() < deadline:
+            if stop_check and stop_check():
+                raise JobStopped("已手动停止")
+            time.sleep(0.05)
+        raise AssertionError("stop was not requested")
+
+    monkeypatch.setattr("wallpaper_studio.jobs.prepare_images", hanging_prepare)
+    reset_demo_sessions()
+    with TestClient(create_app()) as client:
+        started = client.post("/api/start")
+        assert started.status_code == 200
+        assert entered.wait(4), "prepare loop did not start"
+        stopped = client.post("/api/stop")
+        assert stopped.status_code == 200
+        assert "正在停止" in stopped.json()["message"]
+        deadline = time.time() + 6
+        while time.time() < deadline and studio_state.running:
+            time.sleep(0.05)
+        assert studio_state.running is False
+        assert studio_state.stopped is True
+        joined = "\n".join(studio_state.logs)
+        assert "正在停止" in joined
+        assert "任务已停止" in joined

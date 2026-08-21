@@ -9,6 +9,7 @@ from wallpaper_studio.browser import (
     click_even_if_offscreen,
     configure_playwright_env,
 )
+from wallpaper_studio.control import JobStopped
 from wallpaper_studio.models import Account, AccountBatch, SiteProfile
 from wallpaper_studio.sites import category_choices, map_category
 
@@ -318,6 +319,7 @@ async def upload_batches(
     log: LogFn | None = None,
     sleep: Callable[[float], Awaitable[None]] | None = None,
     uploader: BrowserUploader | None = None,
+    stop_check: Callable[[], bool] | None = None,
 ) -> tuple[int, int]:
     """Upload sequentially: finish every image for one account, then switch.
 
@@ -330,25 +332,37 @@ async def upload_batches(
     client = uploader or BrowserUploader(site, emit)
     uploaded = 0
     skipped = 0
+
+    def cancelled() -> bool:
+        return bool(stop_check and stop_check())
+
     try:
         for batch_index, batch in enumerate(batches, start=1):
+            if cancelled():
+                raise JobStopped("已手动停止")
             emit(
                 f"开始账号 {batch.account.username}（{batch_index}/{len(batches)}），"
                 f"本账号 {len(batch.images)} 张"
             )
             await client.start_account(batch.account, batch.proxy)
             for image_index, item in enumerate(batch.images, start=1):
+                if cancelled():
+                    raise JobStopped("已手动停止")
                 title = item.title
                 try:
                     await client.upload_image(item.path, title, site.category_value)
                     uploaded += 1
                 except asyncio.CancelledError:
                     raise
+                except JobStopped:
+                    raise
                 except Exception as exc:  # noqa: BLE001 - skip this file and keep the queue moving
                     skipped += 1
                     emit(f"跳过 {item.path.name}：{_upload_error_text(exc)}")
                     emit("已跳过，继续下一张")
                 if image_index < len(batch.images) and batch.account.interval_seconds > 0:
+                    if cancelled():
+                        raise JobStopped("已手动停止")
                     emit(f"等待 {batch.account.interval_seconds:.0f} 秒后上传下一张")
                     await sleeper(batch.account.interval_seconds)
             emit(f"账号 {batch.account.username} 已完成，切换下一个账号")

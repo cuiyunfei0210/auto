@@ -175,6 +175,10 @@ button.ghost, a.ghost {
   text-decoration: none;
   display: inline-block;
 }
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 .hint, .muted { color: var(--muted); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; line-height: 1.6; }
 .log {

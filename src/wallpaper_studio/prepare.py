@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from wallpaper_studio.control import JobStopped, stop_requested
 from wallpaper_studio.files import clear_images_in_dir, empty_source_message, list_images, sanitize_filename
 from wallpaper_studio.models import AppConfig, PreparedImage, title_api_settings
 from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message, official_image_size
@@ -9,12 +10,14 @@ from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
 ProgressFn = Callable[[int, int], None]
+StopCheck = Callable[[], bool]
 
 
 def prepare_images(
     config: AppConfig,
     log: LogFn | None = None,
     progress: ProgressFn | None = None,
+    stop_check: StopCheck | None = None,
 ) -> list[PreparedImage]:
     """Build the list of images that will be uploaded.
 
@@ -59,7 +62,15 @@ def prepare_images(
         api_size = official_image_size(config.api.image_size)
         emit(f"gpt-image-2 只能原生出 1024×1024 / 1536×1024 / 1024×1536，本轮按 {api_size} 出图，不再放大（放大会发糊）。")
 
+    def cancelled() -> bool:
+        if stop_check and stop_check():
+            return True
+        return stop_requested()
+
     for image in images:
+        if cancelled():
+            emit("已停止，不再处理后续图片。")
+            raise JobStopped("已手动停止")
         title = image.stem
         try:
             label = str(image.relative_to(src))
@@ -70,16 +81,25 @@ def prepare_images(
             try:
                 title = title_client.generate_title(image.stem, image)
                 emit(f"新标题：{title}")
+            except JobStopped:
+                emit("已停止，不再处理后续图片。")
+                raise
             except Exception as exc:  # noqa: BLE001 - keep going with original name
                 emit(f"生成标题失败，沿用原名 {image.stem}：{exc}")
                 title = sanitize_filename(image.stem)
 
+        if cancelled():
+            emit("已停止，不再处理后续图片。")
+            raise JobStopped("已手动停止")
         title = sanitize_filename(title, fallback=image.stem)
         if config.mode == "remix_then_upload":
             assert remix_client is not None
             emit(f"正在二创 {label} …")
             try:
                 remixed = remix_client.remix_image(image, dest, title)
+            except JobStopped:
+                emit("已停止，不再处理后续图片。")
+                raise
             except ApiError as exc:
                 raise ApiError(
                     f"{label} 二创失败。{friendly_error_message(str(exc))}"

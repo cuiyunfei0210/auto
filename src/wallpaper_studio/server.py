@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from wallpaper_studio import __version__
+from wallpaper_studio.control import JobStopped, clear_stop, request_stop, stop_requested
 from wallpaper_studio.demo_site import demo_router
 from wallpaper_studio.jobs import run_job
 from wallpaper_studio.models import AppConfig, RELAY_PRESETS
@@ -34,6 +35,8 @@ class StudioState:
     def __init__(self) -> None:
         self.task: asyncio.Task | None = None
         self.running = False
+        self.stopping = False
+        self.stopped = False
         self.logs: list[str] = []
         self.last_result: dict[str, Any] | None = None
         self.last_error: str | None = None
@@ -71,6 +74,8 @@ class StudioState:
     def snapshot(self) -> dict[str, Any]:
         return {
             "running": self.running,
+            "stopping": self.stopping,
+            "stopped": self.stopped,
             "logs": self.logs[-200:],
             "last_result": self.last_result,
             "last_error": self.last_error,
@@ -78,6 +83,32 @@ class StudioState:
             "remix_total": self.remix_total,
             "version": __version__,
         }
+
+    def begin_job(self) -> None:
+        self.running = True
+        self.stopping = False
+        self.stopped = False
+        self.last_error = None
+        self.last_result = None
+        self.logs = []
+        clear_stop()
+
+    def ask_stop(self) -> str:
+        """Mark the current job for stop. Returns a user-facing log line."""
+        task = self.task
+        alive = task is not None and not task.done()
+        if not self.running and not alive:
+            return "当前没有正在运行的任务"
+        if self.stopping:
+            return "已经在停止了，请稍等当前这张图的请求结束"
+        self.stopping = True
+        request_stop()
+        if alive:
+            task.cancel()
+        return "正在停止…当前这张图如果正在请求中转站，会等这次请求结束后立刻停，不会再做下一张"
+
+    def stop_requested(self) -> bool:
+        return stop_requested()
 
 
 state = StudioState()
@@ -198,10 +229,7 @@ def create_app() -> FastAPI:
                     },
                     status_code=400,
                 )
-            state.running = True
-            state.last_error = None
-            state.last_result = None
-            state.logs = []
+            state.begin_job()
             if config.mode == "remix_then_upload":
                 src, _note = source_dir_status(config)
                 dest, _dest_note = output_dir_status(config)
@@ -227,17 +255,21 @@ def create_app() -> FastAPI:
 
     @app.post("/api/stop")
     async def api_stop() -> JSONResponse:
-        task = state.task
-        if task and not task.done():
-            task.cancel()
-            await state.emit("正在停止…")
-        return JSONResponse({"ok": True})
+        async with state._lock:
+            message = state.ask_stop()
+        await state.emit(message)
+        return JSONResponse(
+            {
+                "ok": True,
+                "message": message,
+                "running": state.running,
+                "stopping": state.stopping,
+            }
+        )
 
     @app.post("/api/shutdown")
     async def api_shutdown() -> JSONResponse:
-        task = state.task
-        if task and not task.done():
-            task.cancel()
+        state.ask_stop()
         lock = runtime.get("lock")
         if lock is not None:
             try:
@@ -308,13 +340,17 @@ async def _run(config: AppConfig) -> None:
             broadcasts.clear()
 
     try:
-        result = await run_job(config, log=log, progress=progress)
+        result = await run_job(config, log=log, progress=progress, stop_check=state.stop_requested)
         await flush_logs()
         state.last_result = result
         await state.emit("任务完成")
+    except JobStopped:
+        await flush_logs()
+        state.stopped = True
+        await state.emit("任务已停止")
     except asyncio.CancelledError:
         await flush_logs()
-        state.last_error = "已手动停止"
+        state.stopped = True
         await state.emit("任务已停止")
         raise
     except Exception as exc:  # noqa: BLE001
@@ -324,9 +360,11 @@ async def _run(config: AppConfig) -> None:
         await state.emit(f"任务失败：{message}")
     finally:
         state.running = False
+        state.stopping = False
         state.task = None
         state.remix_remaining = None
         state.remix_total = None
+        clear_stop()
         await state.send_event({"type": "done", **state.snapshot()})
 
 

@@ -3,11 +3,11 @@ from __future__ import annotations
 import base64
 import mimetypes
 import re
-import time
 from pathlib import Path
 
 import httpx
 
+from wallpaper_studio.control import JobStopped, pop_http, push_http, stop_requested, wait_or_stop
 from wallpaper_studio.files import sanitize_filename, unique_path
 from wallpaper_studio.models import ApiSettings, DEFAULT_API_BASE, effective_remix_prompt
 
@@ -305,23 +305,37 @@ class RelayClient:
         last_error: Exception | None = None
         attempts = max(1, retries + 1)
         for attempt in range(attempts):
+            if stop_requested():
+                raise JobStopped("已手动停止")
             try:
                 with httpx.Client(**kwargs) as client:
-                    response = client.post(
-                        self._url(path),
-                        headers=self._headers(),
-                        json=payload,
-                    )
+                    push_http(client)
+                    try:
+                        response = client.post(
+                            self._url(path),
+                            headers=self._headers(),
+                            json=payload,
+                        )
+                    finally:
+                        pop_http(client)
                 return _json_or_error(response)
+            except JobStopped:
+                raise
             except (httpx.TimeoutException, httpx.TransportError) as exc:
+                if stop_requested():
+                    raise JobStopped("已手动停止") from exc
                 last_error = ApiError(f"中转站网络超时或中断：{exc}")
             except ApiError as exc:
                 last_error = exc
                 if not is_transient_relay_error(str(exc)):
                     raise
+            except Exception as exc:
+                if stop_requested():
+                    raise JobStopped("已手动停止") from exc
+                raise
             if attempt + 1 >= attempts:
                 break
-            time.sleep(2 * (attempt + 1))
+            wait_or_stop(2 * (attempt + 1))
         assert last_error is not None
         raise last_error
 

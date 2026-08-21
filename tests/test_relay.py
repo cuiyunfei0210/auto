@@ -111,7 +111,7 @@ def test_remix_retries_transient_upstream_errors(tmp_path: Path, monkeypatch):
     source = make_png(tmp_path / "night.png")
     image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
     calls = {"n": 0}
-    monkeypatch.setattr("wallpaper_studio.relay.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("wallpaper_studio.relay.wait_or_stop", lambda _seconds: None)
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls["n"] += 1

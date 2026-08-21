@@ -105,11 +105,27 @@ function applyConfig(config) {
   $("account-count").textContent = String((config.accounts || []).length);
 }
 
-function setStatus(running) {
+function setStatus(running, stopping) {
   const pill = $("status-pill");
-  pill.textContent = running ? "运行中" : "空闲";
-  pill.classList.toggle("live", running);
-  $("btn-stop").disabled = !running;
+  const isStopping = Boolean(stopping) || (jobStopping && running);
+  if (isStopping && running) {
+    pill.textContent = "正在停止";
+    pill.classList.add("live");
+  } else {
+    jobStopping = false;
+    pill.textContent = running ? "运行中" : "空闲";
+    pill.classList.toggle("live", running);
+  }
+  if ($("btn-start")) $("btn-start").disabled = Boolean(running);
+}
+
+function appendLog(message) {
+  const log = $("log");
+  if (!log) return;
+  const text = String(message || "").trim();
+  if (!text) return;
+  log.textContent = `${log.textContent}\n${text}`.trim();
+  log.scrollTop = log.scrollHeight;
 }
 
 function renderLogs(lines) {
@@ -177,6 +193,7 @@ async function parseJson(res) {
 let lastState = {};
 let presets = {};
 let relayPresets = {};
+let jobStopping = false;
 
 function matchRelayPreset(api) {
   const url = String((api && api.base_url) || "").toLowerCase();
@@ -257,7 +274,8 @@ async function refresh() {
       hint.classList.remove("error");
     }
   }
-  setStatus(data.running);
+  if (data.stopping) jobStopping = true;
+  setStatus(data.running, data.stopping);
   renderLogs(data.logs);
 }
 
@@ -340,6 +358,7 @@ bindClick("btn-start", async () => {
       notify(formatErrorPayload(data));
       return;
     }
+    jobStopping = false;
     setStatus(true);
     renderLogs(data.logs || ["任务已开始"]);
     notify("任务已开始。请看右侧运行日志；二创每张图可能要几十秒。");
@@ -352,9 +371,22 @@ bindClick("btn-start", async () => {
 });
 bindClick("btn-stop", async () => {
   try {
-    await fetch("/api/stop", { method: "POST" });
-    notify("已发送停止请求。请看右侧运行日志。");
+    appendLog("正在发送停止请求…");
+    const res = await fetch("/api/stop", { method: "POST" });
+    const data = await parseJson(res);
+    const message = (data && data.message) || "已发送停止请求。";
+    appendLog(message);
+    if (data && data.stopping) {
+      jobStopping = true;
+      setStatus(true, true);
+    } else if (data && data.running) {
+      setStatus(true, data.stopping);
+    } else {
+      jobStopping = false;
+      setStatus(false);
+    }
   } catch (err) {
+    jobStopping = false;
     notify(`停止失败：${err && err.message ? err.message : err}`);
   }
 });
@@ -413,9 +445,11 @@ function connectWs() {
         $("remix-count").textContent = payload.remix_pending;
       }
       if (payload.type === "done") {
+        jobStopping = false;
         setStatus(false);
         refreshCounts();
-        if (payload.last_error) notify(`任务失败：\n${payload.last_error}`);
+        if (payload.stopped) notify("任务已停止。");
+        else if (payload.last_error) notify(`任务失败：\n${payload.last_error}`);
         else if (payload.last_result) {
           const uploaded = payload.last_result.uploaded;
           const skipped = payload.last_result.skipped || 0;
@@ -427,13 +461,14 @@ function connectWs() {
         } else {
           notify("任务已结束。请看右侧运行日志。");
         }
-      } else if ("running" in payload) setStatus(Boolean(payload.running));
+      } else if ("running" in payload) {
+        if (payload.stopping) jobStopping = true;
+        setStatus(Boolean(payload.running), payload.stopping);
+      }
       return;
     }
     if (payload.message) {
-      const log = $("log");
-      log.textContent = `${log.textContent}\n${payload.message}`.trim();
-      log.scrollTop = $("log").scrollHeight;
+      appendLog(payload.message);
     }
   };
   ws.onclose = () => setTimeout(connectWs, 1500);
@@ -454,7 +489,8 @@ async function refreshCounts() {
       return;
     }
     applySourceStatus(data);
-    if ("running" in data) setStatus(Boolean(data.running));
+    if (data.stopping) jobStopping = true;
+    if ("running" in data) setStatus(Boolean(data.running), data.stopping);
   } catch (ignore) {
     /* keep the last known counts */
   }

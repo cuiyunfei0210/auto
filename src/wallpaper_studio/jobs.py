@@ -6,11 +6,13 @@ from pathlib import Path
 
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.prepare import prepare_images
+from wallpaper_studio.control import JobStopped
 from wallpaper_studio.scheduler import plan_account_batches
 from wallpaper_studio.uploader import upload_batches
 
 LogFn = Callable[[str], None]
 ProgressFn = Callable[[int, int], None]
+StopCheck = Callable[[], bool]
 
 
 async def run_job(
@@ -21,6 +23,7 @@ async def run_job(
     skip_prepare: bool = False,
     prepared: list[Path] | None = None,
     progress: ProgressFn | None = None,
+    stop_check: StopCheck | None = None,
 ) -> dict:
     emit = log or (lambda _message: None)
     if not config.accounts:
@@ -32,9 +35,11 @@ async def run_job(
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            images = prepare_images(config, emit, progress)
+            images = prepare_images(config, emit, progress, stop_check)
         else:
-            images = await asyncio.to_thread(prepare_images, config, emit, progress)
+            images = await asyncio.to_thread(prepare_images, config, emit, progress, stop_check)
+    if stop_check and stop_check():
+        raise JobStopped("已手动停止")
     if not images:
         raise FileNotFoundError("没有可上传的图片。")
 
@@ -57,6 +62,7 @@ async def run_job(
         log=emit,
         sleep=sleep,
         uploader=uploader,
+        stop_check=stop_check,
     )
     if skipped:
         emit(f"全部结束，成功上传 {uploaded} 张，跳过 {skipped} 张")
