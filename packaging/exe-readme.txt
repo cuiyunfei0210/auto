@@ -24,5 +24,5 @@
 - 用完请点网页上的「退出程序」。日志在 data\studio.log
 - 跳过二创时不会把源图拷进输出目录。开始二创前会清空输出目录里的旧图，本轮张数会和源图一致
 - gpt-image-2 只能原生出 1024×1024 / 1536×1024 / 1024×1536，程序不再放大
-- 根据图片写标题必须填对话/识图模型（如 gpt-4o-mini），不要填 gpt-image-2
+- 根据图片写标题：newxxt 填 gpt-5.4-mini。aipixapi 这组 Key 只有 gpt-image-2，写标题会走 newxxt
 - 中转站 /v1/images 报 image_generation / tools 错时，程序会自动改走对话画图；对话模型用该站实际有的模型

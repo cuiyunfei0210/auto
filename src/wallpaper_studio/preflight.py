@@ -29,7 +29,7 @@ def start_problems(config: AppConfig) -> list[str]:
             or (config.api.username.strip() and config.api.password)
         )
         if not (config.api.base_url or "").strip():
-            problems.append("二创模式需要填写中转站接口地址，例如 https://xmapi.site（不要带 /v1）。")
+            problems.append("二创模式需要填写中转站接口地址，例如 https://api.newxxt.top（不要带 /v1）。")
         if not has_secret:
             problems.append("二创模式需要 API Key，或中转站邮箱和密码。请到「二创 API」填写。")
         if not (config.api.remix_model or "").strip():

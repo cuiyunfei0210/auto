@@ -27,7 +27,7 @@ def test_friendly_message_for_image_generation_tools_error():
 
 def test_friendly_message_for_xbhuiz_image_line():
     text = friendly_error_message("该线路无法完成生图请求,请使用 https://xmapi.site/")
-    assert "xmapi.site" in text
+    assert "newxxt.top" in text
     assert "xbhuiz" in text
     assert "gpt-image-2" in text
 
@@ -278,6 +278,54 @@ def test_remix_keeps_native_size_when_user_asks_2k(tmp_path: Path):
     assert dest.exists()
     with Image.open(dest) as image:
         assert image.size == (1536, 1024)
+
+
+def test_title_api_settings_can_use_a_second_relay():
+    from wallpaper_studio.models import ApiSettings, title_api_settings
+
+    settings = ApiSettings(
+        base_url="https://www.aipixapi.art",
+        api_key="sk-image",
+        filename_model="gpt-5.4-mini",
+        filename_base_url="https://api.newxxt.top",
+        filename_api_key="sk-chat",
+    )
+    title = title_api_settings(settings)
+    assert title.base_url == "https://api.newxxt.top"
+    assert title.api_key == "sk-chat"
+    assert title_api_settings(ApiSettings(base_url="https://api.newxxt.top", api_key="sk-same")).api_key == "sk-same"
+
+
+def test_generate_title_uses_filename_relay_host(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        assert request.headers["Authorization"] == "Bearer sk-chat"
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "红旗街景"}}]},
+        )
+
+    from wallpaper_studio.models import title_api_settings
+
+    settings = ApiSettings(
+        api_key="sk-image",
+        base_url="https://www.aipixapi.art",
+        filename_model="gpt-5.4-mini",
+        filename_base_url="https://api.newxxt.top",
+        filename_api_key="sk-chat",
+    )
+    client = RelayClient(title_api_settings(settings), transport=httpx.MockTransport(handler))
+    assert client.generate_title("night", source) == "红旗街景"
+    assert seen and "chat/completions" in seen[0]
+
+
+def test_friendly_message_for_missing_chat_model():
+    text = friendly_error_message('Model "gpt-5.4-mini" is not supported by any configured account in this group')
+    assert "newxxt" in text
+    assert "gpt-image-2" in text
 
 
 def test_generate_title_sends_the_image(tmp_path: Path):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from wallpaper_studio.files import clear_images_in_dir, empty_source_message, list_images, sanitize_filename
-from wallpaper_studio.models import AppConfig, PreparedImage
+from wallpaper_studio.models import AppConfig, PreparedImage, title_api_settings
 from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message, official_image_size
 from wallpaper_studio.storage import output_dir, source_dir
 
@@ -29,14 +29,22 @@ def prepare_images(
         raise FileNotFoundError(empty_source_message(src))
 
     prepared: list[PreparedImage] = []
-    client = RelayClient(config.api) if _needs_api(config) else None
-    title_model = client.resolve_title_model() if client is not None else ""
-    can_rename = bool(client is not None and config.api.filename_prompt.strip() and title_model)
-    if client is not None and config.api.filename_prompt.strip() and not can_rename:
+    remix_client = RelayClient(config.api) if config.mode == "remix_then_upload" else None
+    title_settings = title_api_settings(config.api)
+    title_client = None
+    if config.api.filename_prompt.strip() and _has_api_secret(title_settings):
+        if remix_client is not None and title_settings is config.api:
+            title_client = remix_client
+        else:
+            title_client = RelayClient(title_settings)
+    title_model = title_client.resolve_title_model() if title_client is not None else ""
+    can_rename = bool(title_client is not None and title_model)
+    if config.api.filename_prompt.strip() and not can_rename:
         emit(
-            "文件名模型必须是对话/识图模型才能根据图片写标题。"
-            f"当前填的是 {config.api.filename_model or config.api.remix_chat_model or '空'}，"
-            "gpt-image-2 不能起名。请改成 Key 组里有的对话模型，例如 gpt-4o-mini。"
+            "根据图片写标题需要对话/识图模型。"
+            f"当前填的是 {config.api.filename_model or '空'}。"
+            "gpt-image-2 不能起名。newxxt 请填 gpt-5.4-mini；"
+            "aipixapi / xmapi 这组 Key 只有生图，请把「写标题接口」改成 https://api.newxxt.top。"
         )
 
     remaining = len(images) if config.mode == "remix_then_upload" else 0
@@ -54,9 +62,9 @@ def prepare_images(
     for image in images:
         title = image.stem
         if can_rename:
-            assert client is not None
+            assert title_client is not None
             try:
-                title = client.generate_title(image.stem, image)
+                title = title_client.generate_title(image.stem, image)
                 emit(f"新标题：{title}")
             except Exception as exc:  # noqa: BLE001 - keep going with original name
                 emit(f"生成标题失败，沿用原名 {image.stem}：{exc}")
@@ -64,10 +72,10 @@ def prepare_images(
 
         title = sanitize_filename(title, fallback=image.stem)
         if config.mode == "remix_then_upload":
-            assert client is not None
+            assert remix_client is not None
             emit(f"正在二创 {image.name} …")
             try:
-                remixed = client.remix_image(image, dest, title)
+                remixed = remix_client.remix_image(image, dest, title)
             except ApiError as exc:
                 raise ApiError(
                     f"{image.name} 二创失败。{friendly_error_message(str(exc))}"
@@ -83,11 +91,15 @@ def prepare_images(
     return prepared
 
 
+def _has_api_secret(settings) -> bool:
+    return bool(
+        settings.api_key.strip()
+        or settings.filename_api_key.strip()
+        or (settings.username.strip() and settings.password)
+    )
+
+
 def _needs_api(config: AppConfig) -> bool:
     if config.mode == "remix_then_upload":
         return True
-    has_secret = bool(
-        config.api.api_key.strip()
-        or (config.api.username.strip() and config.api.password)
-    )
-    return has_secret and bool(config.api.filename_prompt.strip())
+    return _has_api_secret(config.api) and bool(config.api.filename_prompt.strip())

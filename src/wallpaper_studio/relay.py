@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 
 from wallpaper_studio.files import sanitize_filename, unique_path
-from wallpaper_studio.models import ApiSettings, effective_remix_prompt
+from wallpaper_studio.models import ApiSettings, DEFAULT_API_BASE, effective_remix_prompt
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 _DATA_URL = re.compile(r"^data:image/([^;]+);base64,(.+)$", re.DOTALL | re.IGNORECASE)
@@ -25,6 +25,12 @@ def friendly_error_message(raw: str) -> str:
     if "中转站的 /v1/images" in text or "中转站生图接口" in text or "中转站已关闭批量生图" in text or "中转站没有可用的生图线路" in text:
         return text
     lowered = text.lower()
+    if "not supported by any configured account" in lowered or "model_not_found" in lowered:
+        return (
+            "这个中转站的 Key 组没有该模型。"
+            "生图请用 gpt-image-2；写标题请用 gpt-5.4-mini，接口用 https://api.newxxt.top（不要带 /v1）。"
+            "aipixapi 这组 Key 只有 gpt-image-2，不能起名。"
+        )
     if "image_generation" in lowered and "tools" in lowered:
         return (
             "中转站的 /v1/images 生图通道仍在报 Tool choice 'image_generation' not found in 'tools' parameter。"
@@ -33,8 +39,8 @@ def friendly_error_message(raw: str) -> str:
         )
     if "xmapi.site" in lowered and ("生图" in text or "images" in lowered or "线路" in text):
         return (
-            "当前接口走的是 xbhuiz 线路，不能生图。请把接口地址改成 https://xmapi.site （不要带 /v1），"
-            "API Key 用中转站后台给的 sk-，生图模型填 gpt-image-2。"
+            "当前接口走的是 xbhuiz 线路，不能生图。请把接口地址改成 https://api.newxxt.top 或 https://www.aipixapi.art （不要带 /v1），"
+            "生图模型填 gpt-image-2。写标题用 newxxt 的 gpt-5.4-mini。"
         )
     if "temporarily unavailable" in lowered or "upstream service" in lowered or "upstream_error" in lowered:
         return (
@@ -59,7 +65,7 @@ def normalize_api_base(url: str) -> str:
     text = (url or "").strip().rstrip("/")
     if text.lower().endswith("/v1"):
         text = text[:-3].rstrip("/")
-    return text or "https://xmapi.site"
+    return text or DEFAULT_API_BASE
 
 
 def resolve_api_key(settings: ApiSettings, transport: httpx.BaseTransport | None = None) -> str:

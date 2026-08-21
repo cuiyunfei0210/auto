@@ -88,13 +88,25 @@ def test_blank_remix_prompt_is_saved_as_default(studio_home):
     assert client.get("/api/state").json()["config"]["api"]["remix_prompt"] == prompt
 
 
-def test_default_state_includes_cqwall_and_xbhuiz(studio_home):
+def test_state_includes_relay_presets(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    state = client.get("/api/state").json()
+    presets = state["relay_presets"]
+    assert presets["newxxt"]["base_url"] == "https://api.newxxt.top"
+    assert presets["aipixapi"]["base_url"] == "https://www.aipixapi.art"
+    assert presets["aipixapi"]["filename_base_url"] == "https://api.newxxt.top"
+    assert presets["xmapi"]["filename_model"] == "gpt-5.4-mini"
+
+
+def test_default_state_includes_cqwall_and_newxxt(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
     state = client.get("/api/state").json()["config"]
     assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
-    assert "xmapi.site" in state["api"]["base_url"]
+    assert "newxxt.top" in state["api"]["base_url"]
     assert state["api"]["api_key"].startswith("sk-")
+    assert state["api"]["filename_model"] == "gpt-5.4-mini"
 
 
 def test_state_includes_archive_warning_field(studio_home):

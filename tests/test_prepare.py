@@ -11,7 +11,7 @@ from tests.helpers import make_png
 def test_prepare_translates_image_generation_error(studio_home, monkeypatch):
     config = AppConfig(
         mode="remix_then_upload",
-        api=ApiSettings(api_key="sk-test"),
+        api=ApiSettings(api_key="sk-test", filename_prompt=""),
         paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
         accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
     )
@@ -56,6 +56,7 @@ def test_prepare_skips_title_api_for_image_models(studio_home, monkeypatch):
 def test_prepare_reads_nested_source_image(studio_home):
     config = AppConfig(
         mode="upload_only",
+        api=ApiSettings(filename_prompt=""),
         paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
         accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
     )
@@ -70,7 +71,7 @@ def test_prepare_reads_nested_source_image(studio_home):
 def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
     config = AppConfig(
         mode="remix_then_upload",
-        api=ApiSettings(api_key="sk-test"),
+        api=ApiSettings(api_key="sk-test", filename_prompt=""),
         paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
         accounts=[Account(username="demo1", password="123123", upload_count=2, interval_seconds=0)],
     )
@@ -99,6 +100,7 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
 def test_upload_only_keeps_source_images_and_does_not_copy(studio_home):
     config = AppConfig(
         mode="upload_only",
+        api=ApiSettings(filename_prompt=""),
         paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
         accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
     )
@@ -116,7 +118,7 @@ def test_upload_only_keeps_source_images_and_does_not_copy(studio_home):
 def test_remix_clears_leftover_output_so_count_matches_source(studio_home, monkeypatch):
     config = AppConfig(
         mode="remix_then_upload",
-        api=ApiSettings(api_key="sk-test"),
+        api=ApiSettings(api_key="sk-test", filename_prompt=""),
         paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
         accounts=[Account(username="demo1", password="123123", upload_count=2, interval_seconds=0)],
     )

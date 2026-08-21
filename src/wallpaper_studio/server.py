@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from wallpaper_studio import __version__
 from wallpaper_studio.demo_site import demo_router
 from wallpaper_studio.jobs import run_job
-from wallpaper_studio.models import AppConfig
+from wallpaper_studio.models import AppConfig, RELAY_PRESETS
 from wallpaper_studio.storage import (
     load_config,
     output_dir_status,
@@ -114,6 +114,7 @@ def create_app() -> FastAPI:
             payload = state.snapshot()
             payload["config"] = config.model_dump()
             payload["presets"] = {name: profile.model_dump() for name, profile in SITE_PRESETS.items()}
+            payload["relay_presets"] = RELAY_PRESETS
             src, src_note = source_dir_status(config)
             dest, dest_note = output_dir_status(config)
             try:
@@ -167,6 +168,7 @@ def create_app() -> FastAPI:
                     "source_samples": [],
                     "config": {},
                     "presets": {},
+                    "relay_presets": {},
                 },
                 status_code=500,
             )

@@ -55,7 +55,8 @@ Windows / Linux / macOS 都会各打一份。
 ## 能做什么
 
 - 跳过二创，直接选本地文件夹上传
-- 对接中转站 API（默认 `https://xmapi.site`，生图模型 `gpt-image-2`）做图生图
+- 对接中转站 API（默认 `https://api.newxxt.top`，生图 `gpt-image-2`，起名 `gpt-5.4-mini`）做图生图
+- 也可以换成 `https://www.aipixapi.art/` 生图（这组 Key 只有 gpt-image-2，写标题仍走 newxxt）
 - 多账号队列：每个账号可设上传数量、间隔和独立代理
 - 用 Chromium 打开登录页、填表、选文件、点发布（不调壁纸站后台接口）
 - 代理可选。默认 **一个账号一个出口 IP**，代理不够或两个账号填了同一个代理时会拒绝开跑；关掉代理也能正常上传
@@ -83,17 +84,19 @@ python run.py
 
 对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)，账号页预填 `ari-ihcot@linshi-mail.com`。分类默认风景（值为 9）。当前分类：1 动物 / 2 军事 / 3 汽车 / 4 电影 / 5 时代 / 6 明星 / 7 宇宙 / 8 美女 / 9 风景 / 10 动漫 / 17 游戏 / 18 都市。程序不限制图片宽高。
 
-中转站默认 [xmapi.site](https://xmapi.site/)，不要填 `xbhuiz.com`（那条线路不能生图）。接口地址不要带 `/v1`。账号队列里不要填中转站邮箱。
+中转站默认 [api.newxxt.top](https://api.newxxt.top/)，也可以用 [aipixapi.art](https://www.aipixapi.art/)。不要填 `xbhuiz.com`（那条线路不能生图）。接口地址不要带 `/v1`。账号队列里不要填中转站邮箱。
 
 ## 二创
 
-在「二创 API」可改中转站地址或 API Key。当前默认是 `https://xmapi.site`，生图模型 `gpt-image-2`。后台 OpenCode 配置里的 `gpt-5.x` 是对话模型，这组生图 Key 通常只有 `gpt-image-2`，不能用来写标题。
+在「二创 API」可选中转站模板。默认是 `https://api.newxxt.top`：生图用 `gpt-image-2`，根据图片写标题用 `gpt-5.4-mini`。OpenCode 配置里的 `gpt-5.x` 是对话模型，不要填进生图模型。
+
+`https://www.aipixapi.art` 这组 Key 只有 `gpt-image-2`，适合生图；写标题会改走 newxxt。`xmapi.site` 同样是生图为主。
 
 `gpt-image-2` 走干净的 `/v1/images/edits`（`images[].image_url`），不再先打 `/v1/responses` / `/v1/chat/completions`。
 
 `gpt-image-2` 只能原生出 `1024x1024` / `1536x1024` / `1024x1536`。填 2K/4K 也会落到 `1536x1024`，程序不再事后放大（放大会发糊）。
 
-文件名提示词会走 `/v1/chat/completions`，并根据图片内容识图起名。必须填对话/识图模型（例如 `gpt-4o-mini`）；`gpt-image-2` 不能写标题，这时会沿用原文件名。
+文件名提示词会走 `/v1/chat/completions`，并根据图片内容识图起名。newxxt 填 `gpt-5.4-mini`。`gpt-image-2` 不能写标题。
 
 跳过二创时直接上传源文件夹，不会再把源图拷进输出目录。开始二创前会清空输出目录里的旧图，所以本轮二创张数会和源图一致。
 
