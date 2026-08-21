@@ -43,6 +43,18 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: "0"
         run: python -m PyInstaller --noconfirm wallpaper_studio.spec
+      - name: Confirm Windows Python runtime is bundled
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          folder = Path("dist/WallpaperStudio/_internal")
+          exe = Path("dist/WallpaperStudio/WallpaperStudio.exe")
+          assert exe.is_file(), exe
+          assert (folder / "python312.dll").is_file(), folder
+          names = {path.name.lower() for path in folder.glob("*.dll")}
+          assert "vcruntime140.dll" in names, sorted(names)[:40]
+
       - name: Stage delivery folder
         shell: bash
         run: |
@@ -50,6 +62,7 @@ jobs:
           cp packaging/exe-readme.txt delivery/使用说明.txt || cp packaging/exe-readme.txt delivery/
           if [ -d dist/WallpaperStudio ]; then
             cp -R dist/WallpaperStudio delivery/WallpaperStudio
+            cp packaging/open-studio.bat delivery/WallpaperStudio/打开壁纸工坊.bat || true
           elif [ -f dist/WallpaperStudio.exe ]; then
             cp dist/WallpaperStudio.exe delivery/
           else

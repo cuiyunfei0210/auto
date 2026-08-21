@@ -17,6 +17,7 @@
 - 上传网页需要 Chromium。新打包会把浏览器打进 _internal；若仍提示找不到浏览器，请安装 Microsoft Edge
 - 不要只拷一个 exe，同目录的其它文件也要一起带走
 - 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）
+- 如果弹出 Failed to load Python DLL / python312.dll / 找不到指定的模块：先删掉整个 WallpaperStudio 文件夹，再解压 GitHub 的 client-Windows。exe 必须和 _internal 在同一层。也可以先双击「打开壁纸工坊.bat」检查。还不行就安装 VC++：https://aka.ms/vs/17/release/vc_redist.x64.exe ，并看杀毒软件有没有隔离 dll
 - 配置和图片在 exe 旁边的 data 文件夹。源图请放进 data\source（或「文件夹」页显示的实际读取目录），子文件夹里的图也会算
 - 同一台电脑只能开一份。如果再双击 exe 没有新窗口，多半已经在跑，浏览器会打开 http://127.0.0.1:8765
 - 如果提示已经在运行，但网页打不开：打开任务管理器，结束 WallpaperStudio.exe，再重新双击。新版本也会自动清掉卡死的旧进程

@@ -6,21 +6,28 @@ def test_windows_packaging_files_exist():
     assert (root / "build-windows.bat").exists()
     assert (root / "start.bat").exists()
     assert (root / "packaging" / "exe-readme.txt").exists()
+    assert (root / "packaging" / "open-studio.bat").exists()
     assert (root / "wallpaper_studio.spec").exists()
     workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
     assert "name: Build client app" in workflow
     assert "windows-latest" in workflow
     assert "PLAYWRIGHT_BROWSERS_PATH" in workflow
     assert "playwright install chromium" in workflow
+    assert "python312.dll" in workflow
+    assert "open-studio.bat" in workflow
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
     assert ".local-browsers" in spec
     assert 'sys.platform != "darwin"' in spec
     assert "console=False" in spec
+    assert "_windows_runtime_binaries" in spec
+    assert "vcruntime140.dll" in spec
+    assert "python312.dll" in spec
     workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
     assert "if: runner.os != 'macOS'" in workflow
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
     assert "WallpaperStudio.exe" in text
     assert "PLAYWRIGHT_BROWSERS_PATH" in text
+    assert "打开壁纸工坊.bat" in text
     ui = (root / "src" / "wallpaper_studio" / "web" / "studio.js").read_text(encoding="utf-8")
     assert "function renderLogs" in ui
     assert "function notify(" in ui
@@ -42,9 +49,12 @@ def test_windows_packaging_files_exist():
     assert "replaceAll" not in ui
     assert "studio.js" in html
     assert "charset=" in html
+    assert "btn-quit" in html
     launcher = (root / "src" / "wallpaper_studio" / "__main__.py").read_text(encoding="utf-8")
     assert "access_log=False" in launcher
-    assert "btn-quit" in html
+    readme = (root / "packaging" / "exe-readme.txt").read_text(encoding="utf-8")
+    assert "python312.dll" in readme
+    assert "vc_redist.x64.exe" in readme
 
 
 def test_studio_js_has_valid_syntax():

@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 import sys
 from pathlib import Path
 
@@ -7,6 +8,36 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 root = Path(SPECPATH).resolve()
 web = root / "src" / "wallpaper_studio" / "web"
 readme = root / "packaging" / "exe-readme.txt"
+
+
+def _windows_runtime_binaries() -> list[tuple[str, str]]:
+    """Ship python312.dll plus the VC runtime it needs to LoadLibrary."""
+    if sys.platform != "win32":
+        return []
+    names = (
+        "python312.dll",
+        "python3.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+        "msvcp140.dll",
+    )
+    directories = [
+        Path(sys.base_prefix),
+        Path(sys.base_prefix) / "DLLs",
+        Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32",
+    ]
+    found: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for directory in directories:
+        for name in names:
+            if name in seen:
+                continue
+            src = directory / name
+            if src.is_file():
+                found.append((str(src), "."))
+                seen.add(name)
+    return found
+
 
 datas = [(str(web), "wallpaper_studio/web")]
 if readme.exists():
@@ -17,7 +48,7 @@ datas += [
     for src, dest in collect_data_files("playwright")
     if ".local-browsers" not in Path(src).as_posix()
 ]
-binaries = collect_dynamic_libs("playwright")
+binaries = collect_dynamic_libs("playwright") + _windows_runtime_binaries()
 
 try:
     import playwright
