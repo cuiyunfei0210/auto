@@ -347,7 +347,11 @@ class RelayClient:
             user_content = [
                 {
                     "type": "text",
-                    "text": f"{prompt}\nLook at this wallpaper and write a short Chinese title. Original filename: {original_stem}",
+                    "text": (
+                        f"{prompt}\n"
+                        "Look at this wallpaper and write one title that follows the instructions above. "
+                        f"Original filename: {original_stem}"
+                    ),
                 },
                 {"type": "image_url", "image_url": {"url": data_url}},
             ]
@@ -358,7 +362,10 @@ class RelayClient:
             "messages": [
                 {
                     "role": "system",
-                    "content": "Return only the title text. No quotes, no file extension.",
+                    "content": (
+                        "Follow the title instructions exactly, including the requested language. "
+                        "Return only the title text. No quotes, no file extension."
+                    ),
                 },
                 {"role": "user", "content": user_content},
             ],

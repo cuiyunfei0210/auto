@@ -350,6 +350,37 @@ def test_generate_title_sends_the_image(tmp_path: Path):
     assert isinstance(content, list)
     assert content[1]["type"] == "image_url"
     assert content[1]["image_url"]["url"].startswith("data:image")
+    text = content[0]["text"]
+    assert "Chinese title" not in text
+    assert "Write a short English wallpaper title" in text
+    system = seen[0]["messages"][0]["content"]
+    assert "requested language" in system
+
+
+def test_generate_title_keeps_english_prompt(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "Red Flag Street"}}]},
+        )
+
+    client = RelayClient(
+        ApiSettings(
+            api_key="sk-test",
+            filename_model="gpt-4o-mini",
+            filename_prompt="生成简短英文壁纸标题，最多 18 字符，不带文件后缀与引号。",
+        ),
+        transport=httpx.MockTransport(handler),
+    )
+    assert client.generate_title("night", source) == "Red Flag Street"
+    text = seen[0]["messages"][1]["content"][0]["text"]
+    assert "生成简短英文壁纸标题" in text
+    assert "Chinese" not in text
+    assert "中文" not in seen[0]["messages"][0]["content"]
 
 
 def test_resolve_title_model_skips_image_models():

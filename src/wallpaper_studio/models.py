@@ -46,6 +46,20 @@ XMAP_API_BASE = "https://xmapi.site"
 XMAP_API_KEY = "sk-8a77cad546b762802c03bf0afaa41b5a68d3962d2ec939188bf64a6f1d5337df"
 DEFAULT_CHAT_MODEL = "gpt-5.4-mini"
 DEFAULT_IMAGE_MODEL = "gpt-image-2"
+DEFAULT_FILENAME_PROMPT = (
+    "Write a short English wallpaper title, max 18 characters, no file extension, no quotes."
+)
+_OLD_FILENAME_PROMPTS = {
+    "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes.",
+}
+
+
+def upgrade_filename_prompt(value: str | None) -> str:
+    """Keep a blank prompt blank (skip titles). Replace the old Chinese default."""
+    text = value if value is not None else ""
+    if text.strip() in _OLD_FILENAME_PROMPTS:
+        return DEFAULT_FILENAME_PROMPT
+    return text
 
 
 class ApiSettings(BaseModel):
@@ -59,7 +73,7 @@ class ApiSettings(BaseModel):
     filename_base_url: str = ""
     filename_api_key: str = ""
     remix_prompt: str = DEFAULT_REMIX_PROMPT
-    filename_prompt: str = "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes."
+    filename_prompt: str = DEFAULT_FILENAME_PROMPT
     image_size: str = "1536x1024"
 
     @field_validator("remix_prompt", mode="before")
@@ -69,6 +83,13 @@ class ApiSettings(BaseModel):
             return DEFAULT_REMIX_PROMPT
         if isinstance(value, str):
             return effective_remix_prompt(value)
+        return value
+
+    @field_validator("filename_prompt", mode="before")
+    @classmethod
+    def upgrade_old_filename_prompt(cls, value: object) -> object:
+        if isinstance(value, str):
+            return upgrade_filename_prompt(value)
         return value
 
 
@@ -295,6 +316,10 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
     prompt = effective_remix_prompt(str(api.get("remix_prompt") or ""))
     if prompt != str(api.get("remix_prompt") or ""):
         api["remix_prompt"] = prompt
+        changed = True
+    filename_prompt = upgrade_filename_prompt(str(api.get("filename_prompt") or ""))
+    if filename_prompt != str(api.get("filename_prompt") or ""):
+        api["filename_prompt"] = filename_prompt
         changed = True
     if not changed:
         return config

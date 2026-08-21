@@ -209,3 +209,24 @@ def test_apply_defaults_upgrades_cinematic_remix_prompt():
     assert config.api.remix_prompt == DEFAULT_REMIX_PROMPT
     assert "电影级光影" not in config.api.remix_prompt
 
+
+def test_old_chinese_filename_prompt_upgrades_to_english():
+    from wallpaper_studio.models import DEFAULT_FILENAME_PROMPT
+
+    config = AppConfig.model_validate(
+        {
+            "api": {
+                "filename_prompt": "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes."
+            }
+        }
+    )
+    updated = apply_builtin_defaults(config)
+    assert updated.api.filename_prompt == DEFAULT_FILENAME_PROMPT
+    assert "English" in updated.api.filename_prompt
+    assert "Chinese" not in updated.api.filename_prompt
+
+
+def test_blank_filename_prompt_stays_blank():
+    config = AppConfig.model_validate({"api": {"filename_prompt": ""}})
+    assert config.api.filename_prompt == ""
+
