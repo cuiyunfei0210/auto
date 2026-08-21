@@ -98,7 +98,7 @@ python run.py
 
 `gpt-image-2` 走干净的 `/v1/images/edits`（`images[].image_url`），不再先打 `/v1/responses` / `/v1/chat/completions`。
 
-`gpt-image-2` 只能原生出 `1024x1024` / `1536x1024` / `1024x1536`。填 2K/4K 也会落到 `1536x1024`，程序不再事后放大（放大会发糊）。
+`gpt-image-2` 只能原生出 `1024x1024` / `1536x1024` / `1024x1536`。出图尺寸填 `1920x1080`、`2K`、`4K` 时，会先按最接近的原生尺寸出图，再放大到你填的宽高。CQwall 最少要 1920×1080，推荐填 `1920x1080`。
 
 文件名提示词会走 `/v1/chat/completions`，并根据图片内容识图起名。newxxt 填 `gpt-5.4-mini`。`gpt-image-2` 不能写标题。
 

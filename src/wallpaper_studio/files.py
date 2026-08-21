@@ -193,7 +193,10 @@ def fit_image_bytes(image_bytes: bytes, size: tuple[int, int], suffix: str = ".p
         cropped = resized.crop((left, top, left + target_w, top + target_h))
         buffer = BytesIO()
         fmt = "JPEG" if suffix.lower() in {".jpg", ".jpeg"} else "PNG"
-        cropped.save(buffer, format=fmt)
+        if fmt == "JPEG":
+            cropped.save(buffer, format=fmt, quality=95, subsampling=0)
+        else:
+            cropped.save(buffer, format=fmt)
         return buffer.getvalue()
 
 

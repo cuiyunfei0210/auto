@@ -63,12 +63,14 @@ def test_official_image_size_maps_1k():
     assert official_image_size("4K") == "1536x1024"
 
 
-def test_resolve_remix_size_does_not_upscale():
-    assert resolve_remix_size("2K") == ("1536x1024", None)
-    assert resolve_remix_size("4K") == ("1536x1024", None)
-    assert resolve_remix_size("1920x1080") == ("1536x1024", None)
+def test_resolve_remix_size_upscales_wallpaper_sizes():
+    assert resolve_remix_size("2K") == ("1536x1024", (2560, 1440))
+    assert resolve_remix_size("4K") == ("1536x1024", (3840, 2160))
+    assert resolve_remix_size("1920x1080") == ("1536x1024", (1920, 1080))
+    assert resolve_remix_size("1080x1920") == ("1024x1536", (1080, 1920))
     assert resolve_remix_size("1536x1024") == ("1536x1024", None)
     assert resolve_remix_size("1K") == ("1024x1024", None)
+    assert resolve_remix_size("2000x1100") == ("1536x1024", (2000, 1100))
 
 
 def test_extract_image_from_responses_payload():
@@ -98,7 +100,7 @@ def test_remix_image_model_uses_clean_edits_endpoint(tmp_path: Path):
         )
 
     client = RelayClient(
-        ApiSettings(api_key="sk-test"),
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
         transport=httpx.MockTransport(handler),
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
@@ -123,7 +125,7 @@ def test_remix_retries_transient_upstream_errors(tmp_path: Path, monkeypatch):
         return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
 
     client = RelayClient(
-        ApiSettings(api_key="sk-test"),
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
         transport=httpx.MockTransport(handler),
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
@@ -149,7 +151,12 @@ def test_remix_chat_model_tries_responses_first(tmp_path: Path):
         return httpx.Response(400, json={"error": {"message": "nope"}})
 
     client = RelayClient(
-        ApiSettings(api_key="sk-test", remix_chat_model="gpt-4o", remix_model="gpt-image-2"),
+        ApiSettings(
+            api_key="sk-test",
+            remix_chat_model="gpt-4o",
+            remix_model="gpt-image-2",
+            image_size="1024x1024",
+        ),
         transport=httpx.MockTransport(handler),
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
@@ -172,7 +179,7 @@ def test_remix_falls_back_to_chat_if_responses_has_no_image(tmp_path: Path):
         return httpx.Response(500, json={"error": {"message": "nope"}})
 
     client = RelayClient(
-        ApiSettings(api_key="sk-test", remix_chat_model="gpt-4o"),
+        ApiSettings(api_key="sk-test", remix_chat_model="gpt-4o", image_size="1024x1024"),
         transport=httpx.MockTransport(handler),
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
@@ -206,7 +213,12 @@ def test_resolves_api_key_by_logging_into_relay(tmp_path: Path):
         return httpx.Response(404, json={"error": {"message": request.url.path}})
 
     client = RelayClient(
-        ApiSettings(api_key="", username="596003517@qq.com", password="123123"),
+        ApiSettings(
+            api_key="",
+            username="596003517@qq.com",
+            password="123123",
+            image_size="1024x1024",
+        ),
         transport=httpx.MockTransport(handler),
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
@@ -257,7 +269,7 @@ def test_do_not_sunset_still_gets_anti_dusk_guard():
     assert not prompt_asks_for_sunset("no sunset, use noon light")
 
 
-def test_remix_keeps_native_size_when_user_asks_2k(tmp_path: Path):
+def test_remix_upscales_when_user_asks_2k(tmp_path: Path):
     from PIL import Image
 
     source = make_png(tmp_path / "night.png")
@@ -277,7 +289,27 @@ def test_remix_keeps_native_size_when_user_asks_2k(tmp_path: Path):
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
     with Image.open(dest) as image:
-        assert image.size == (1536, 1024)
+        assert image.size == (2560, 1440)
+
+
+def test_remix_upscales_1920x1080(tmp_path: Path):
+    from PIL import Image
+
+    source = make_png(tmp_path / "night.png")
+    native = tmp_path / "native.png"
+    Image.new("RGB", (1536, 1024), (20, 40, 80)).save(native)
+    image_b64 = base64.b64encode(native.read_bytes()).decode("ascii")
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1920x1080"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    with Image.open(dest) as image:
+        assert image.size == (1920, 1080)
 
 
 def test_title_api_settings_can_use_a_second_relay():

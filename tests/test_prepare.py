@@ -94,7 +94,8 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
     assert ticks[1] == (1, 2)
     assert ticks[2] == (0, 2)
     assert any("不会强制黄昏" in line for line in logs)
-    assert any("不再放大" in line for line in logs)
+    assert any("放大到 1920×1080" in line for line in logs)
+    assert not any("不再放大" in line for line in logs)
 
 
 def test_upload_only_keeps_source_images_and_does_not_copy(studio_home):

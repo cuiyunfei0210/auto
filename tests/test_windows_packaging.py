@@ -49,6 +49,8 @@ def test_windows_packaging_files_exist():
     assert "退出程序" in html
     assert "relay_preset" in html
     assert "aipixapi" in html
+    assert "1920x1080" in html
+    assert "再放大" in html
     assert "??" not in ui
     assert "replaceAll" not in ui
     assert "studio.js" in html

@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 
 from wallpaper_studio.control import JobStopped, pop_http, push_http, stop_requested, wait_or_stop
-from wallpaper_studio.files import sanitize_filename, unique_path
+from wallpaper_studio.files import fit_image_bytes, sanitize_filename, unique_path
 from wallpaper_studio.models import ApiSettings, DEFAULT_API_BASE, effective_remix_prompt
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
@@ -142,19 +142,22 @@ def is_transient_relay_error(text: str) -> bool:
     return any(token in lowered for token in tokens)
 
 
+MAX_OUTPUT_SIDE = 7680
+
+
 def official_image_size(value: str) -> str:
     api_size, _upscale = resolve_remix_size(value)
     return api_size
 
 
 def resolve_remix_size(value: str) -> tuple[str, tuple[int, int] | None]:
-    """Map UI size text to gpt-image-2's native size. Never upscale.
+    """Map UI size to gpt-image-2's native size plus an exact output size.
 
-    gpt-image-2 only generates 1024x1024, 1536x1024, or 1024x1536. Values like
-    2K/4K/1920x1080 map to the closest native size. Enlarging after generation
-    made wallpapers look soft, so the second return value is always None.
+    gpt-image-2 only generates 1024x1024, 1536x1024, or 1024x1536. Configured
+    sizes such as 1920x1080 are generated at the nearest native size, then
+    resized with LANCZOS so the saved file matches what the user filled in.
     """
-    text = (value or "").strip() or "1536x1024"
+    text = (value or "").strip() or "1920x1080"
     key = text.lower().replace(" ", "").replace("×", "x")
     mapping: dict[str, tuple[str, tuple[int, int] | None]] = {
         "1k": ("1024x1024", None),
@@ -162,29 +165,33 @@ def resolve_remix_size(value: str) -> tuple[str, tuple[int, int] | None]:
         "square": ("1024x1024", None),
         "auto": ("auto", None),
         "1536x1024": ("1536x1024", None),
-        "landscape": ("1536x1024", None),
-        "2k": ("1536x1024", None),
-        "qhd": ("1536x1024", None),
-        "2560x1440": ("1536x1024", None),
-        "1080p": ("1536x1024", None),
-        "fhd": ("1536x1024", None),
-        "1920x1080": ("1536x1024", None),
-        "4k": ("1536x1024", None),
-        "uhd": ("1536x1024", None),
-        "3840x2160": ("1536x1024", None),
-        "portrait": ("1024x1536", None),
+        "landscape": ("1536x1024", (1920, 1080)),
+        "2k": ("1536x1024", (2560, 1440)),
+        "qhd": ("1536x1024", (2560, 1440)),
+        "2560x1440": ("1536x1024", (2560, 1440)),
+        "1080p": ("1536x1024", (1920, 1080)),
+        "fhd": ("1536x1024", (1920, 1080)),
+        "1920x1080": ("1536x1024", (1920, 1080)),
+        "4k": ("1536x1024", (3840, 2160)),
+        "uhd": ("1536x1024", (3840, 2160)),
+        "3840x2160": ("1536x1024", (3840, 2160)),
+        "portrait": ("1024x1536", (1080, 1920)),
         "1024x1536": ("1024x1536", None),
-        "1080x1920": ("1024x1536", None),
-        "9:16": ("1024x1536", None),
-        "16:9": ("1536x1024", None),
+        "1080x1920": ("1024x1536", (1080, 1920)),
+        "9:16": ("1024x1536", (1080, 1920)),
+        "16:9": ("1536x1024", (1920, 1080)),
     }
     if key in mapping:
         return mapping[key]
     parsed = _parse_width_height(key)
     if parsed:
         width, height = parsed
-        return _nearest_official_size(width, height), None
-    return "1536x1024", None
+        api_size = _nearest_official_size(width, height)
+        api_w, api_h = (int(part) for part in api_size.split("x"))
+        if (width, height) == (api_w, api_h):
+            return api_size, None
+        return api_size, (width, height)
+    return "1536x1024", (1920, 1080)
 
 
 def _parse_width_height(text: str) -> tuple[int, int] | None:
@@ -196,7 +203,7 @@ def _parse_width_height(text: str) -> tuple[int, int] | None:
     width, height = int(left), int(right)
     if width < 256 or height < 256:
         return None
-    return width, height
+    return min(width, MAX_OUTPUT_SIDE), min(height, MAX_OUTPUT_SIDE)
 
 
 def _nearest_official_size(width: int, height: int) -> str:
@@ -398,6 +405,7 @@ class RelayClient:
         encoded = base64.b64encode(raw).decode("ascii")
         data_url = f"data:{mime};base64,{encoded}"
         errors: list[str] = []
+        _api_size, target = resolve_remix_size(self.settings.image_size)
         for path, payload in self._remix_requests(data_url, mime):
             try:
                 data = self._post_json(path, payload, retries=3)
@@ -405,6 +413,8 @@ class RelayClient:
             except ApiError as exc:
                 errors.append(f"{path}: {exc}")
                 continue
+            if target:
+                image_bytes = fit_image_bytes(image_bytes, target, suffix)
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = unique_path(dest_dir, title, suffix)
             dest.write_bytes(image_bytes)

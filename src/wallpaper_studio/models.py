@@ -74,7 +74,7 @@ class ApiSettings(BaseModel):
     filename_api_key: str = ""
     remix_prompt: str = DEFAULT_REMIX_PROMPT
     filename_prompt: str = DEFAULT_FILENAME_PROMPT
-    image_size: str = "1536x1024"
+    image_size: str = "1920x1080"
 
     @field_validator("remix_prompt", mode="before")
     @classmethod
