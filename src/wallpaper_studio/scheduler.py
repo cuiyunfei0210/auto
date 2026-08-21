@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from wallpaper_studio.models import Account, AccountBatch, NetworkSettings
+from pathlib import Path
+
+from wallpaper_studio.models import Account, AccountBatch, NetworkSettings, PreparedImage
 
 
 class ProxyAssignmentError(ValueError):
@@ -78,7 +80,7 @@ def plan_account_batches(
     network: NetworkSettings | None = None,
 ) -> list[AccountBatch]:
     """Assign images to accounts in order: finish one account, then the next."""
-    remaining = list(images)
+    remaining = [_as_prepared(item) for item in images]
     batches: list[AccountBatch] = []
     network = network or NetworkSettings()
     used: set[str] = set()
@@ -95,3 +97,10 @@ def plan_account_batches(
             )
         )
     return batches
+
+
+def _as_prepared(item: object) -> PreparedImage:
+    if isinstance(item, PreparedImage):
+        return item
+    path = item if isinstance(item, Path) else Path(str(item))
+    return PreparedImage(path=path, title=path.stem)

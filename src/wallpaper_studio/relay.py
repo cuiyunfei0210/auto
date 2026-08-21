@@ -8,7 +8,7 @@ from pathlib import Path
 
 import httpx
 
-from wallpaper_studio.files import sanitize_filename, unique_path, fit_image_bytes
+from wallpaper_studio.files import sanitize_filename, unique_path
 from wallpaper_studio.models import ApiSettings, effective_remix_prompt
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
@@ -142,13 +142,13 @@ def official_image_size(value: str) -> str:
 
 
 def resolve_remix_size(value: str) -> tuple[str, tuple[int, int] | None]:
-    """Map UI size text to gpt-image-2's native size plus an optional upscale target.
+    """Map UI size text to gpt-image-2's native size. Never upscale.
 
-    gpt-image-2 only generates 1024x1024, 1536x1024, or 1024x1536. Values like 2K/4K
-    used to be silently sent as 1536x1024. We still generate at that native size, then
-    enlarge to a real wallpaper resolution when the user asked for one.
+    gpt-image-2 only generates 1024x1024, 1536x1024, or 1024x1536. Values like
+    2K/4K/1920x1080 map to the closest native size. Enlarging after generation
+    made wallpapers look soft, so the second return value is always None.
     """
-    text = (value or "").strip() or "1920x1080"
+    text = (value or "").strip() or "1536x1024"
     key = text.lower().replace(" ", "").replace("×", "x")
     mapping: dict[str, tuple[str, tuple[int, int] | None]] = {
         "1k": ("1024x1024", None),
@@ -157,33 +157,28 @@ def resolve_remix_size(value: str) -> tuple[str, tuple[int, int] | None]:
         "auto": ("auto", None),
         "1536x1024": ("1536x1024", None),
         "landscape": ("1536x1024", None),
-        "2k": ("1536x1024", (2560, 1440)),
-        "qhd": ("1536x1024", (2560, 1440)),
-        "2560x1440": ("1536x1024", (2560, 1440)),
-        "1080p": ("1536x1024", (1920, 1080)),
-        "fhd": ("1536x1024", (1920, 1080)),
-        "1920x1080": ("1536x1024", (1920, 1080)),
-        "4k": ("1536x1024", (3840, 2160)),
-        "uhd": ("1536x1024", (3840, 2160)),
-        "3840x2160": ("1536x1024", (3840, 2160)),
+        "2k": ("1536x1024", None),
+        "qhd": ("1536x1024", None),
+        "2560x1440": ("1536x1024", None),
+        "1080p": ("1536x1024", None),
+        "fhd": ("1536x1024", None),
+        "1920x1080": ("1536x1024", None),
+        "4k": ("1536x1024", None),
+        "uhd": ("1536x1024", None),
+        "3840x2160": ("1536x1024", None),
         "portrait": ("1024x1536", None),
         "1024x1536": ("1024x1536", None),
-        "1080x1920": ("1024x1536", (1080, 1920)),
-        "9:16": ("1024x1536", (1080, 1920)),
-        "16:9": ("1536x1024", (1920, 1080)),
+        "1080x1920": ("1024x1536", None),
+        "9:16": ("1024x1536", None),
+        "16:9": ("1536x1024", None),
     }
     if key in mapping:
         return mapping[key]
     parsed = _parse_width_height(key)
     if parsed:
         width, height = parsed
-        api_size = _nearest_official_size(width, height)
-        if (width, height) == tuple(int(part) for part in api_size.split("x")):
-            return api_size, None
-        if width * height > 1024 * 1024:
-            return api_size, (width, height)
-        return api_size, None
-    return mapping.get(key, ("1536x1024", (1920, 1080)))
+        return _nearest_official_size(width, height), None
+    return "1536x1024", None
 
 
 def _parse_width_height(text: str) -> tuple[int, int] | None:
@@ -261,21 +256,6 @@ def build_remix_prompt(user_prompt: str) -> str:
     )
 
 
-_NATIVE_GPT_IMAGE_SIZES = {(1024, 1024), (1536, 1024), (1024, 1536)}
-
-
-def _upscale_native_wallpaper(image_bytes: bytes, target: tuple[int, int], suffix: str) -> bytes:
-    from io import BytesIO
-
-    from PIL import Image
-
-    with Image.open(BytesIO(image_bytes)) as image:
-        current = image.size
-    if current not in _NATIVE_GPT_IMAGE_SIZES or current == target:
-        return image_bytes
-    return fit_image_bytes(image_bytes, target, suffix)
-
-
 class RelayClient:
     def __init__(
         self,
@@ -339,23 +319,42 @@ class RelayClient:
         assert last_error is not None
         raise last_error
 
-    def generate_title(self, original_stem: str) -> str:
-        if not chat_model_supports_titles(self.settings.filename_model):
+    def resolve_title_model(self) -> str:
+        """Pick a chat/vision model. gpt-image-2 cannot write titles."""
+        for candidate in (self.settings.filename_model, self.settings.remix_chat_model):
+            if chat_model_supports_titles(candidate):
+                return candidate.strip()
+        return ""
+
+    def generate_title(self, original_stem: str, image: Path | None = None) -> str:
+        model = self.resolve_title_model()
+        if not model:
             raise ApiError(
-                f"文件名模型 {self.settings.filename_model} 不支持对话接口，无法自动起名。"
+                f"文件名模型 {self.settings.filename_model or '空'} 不支持对话接口，无法根据图片写标题。"
             )
         prompt = self.settings.filename_prompt.strip() or "Generate a short wallpaper title."
+        user_content: list | str
+        if image is not None and image.exists():
+            mime = mimetypes.guess_type(image.name)[0] or "image/png"
+            encoded = base64.b64encode(image.read_bytes()).decode("ascii")
+            data_url = f"data:{mime};base64,{encoded}"
+            user_content = [
+                {
+                    "type": "text",
+                    "text": f"{prompt}\nLook at this wallpaper and write a short Chinese title. Original filename: {original_stem}",
+                },
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ]
+        else:
+            user_content = f"{prompt}\nOriginal filename: {original_stem}"
         payload = {
-            "model": self.settings.filename_model,
+            "model": model,
             "messages": [
                 {
                     "role": "system",
                     "content": "Return only the title text. No quotes, no file extension.",
                 },
-                {
-                    "role": "user",
-                    "content": f"{prompt}\nOriginal filename: {original_stem}",
-                },
+                {"role": "user", "content": user_content},
             ],
             "max_tokens": 64,
         }
@@ -381,9 +380,6 @@ class RelayClient:
                 continue
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = unique_path(dest_dir, title, suffix)
-            _api_size, upscale = resolve_remix_size(self.settings.image_size)
-            if upscale:
-                image_bytes = _upscale_native_wallpaper(image_bytes, upscale, suffix)
             dest.write_bytes(image_bytes)
             return dest
         combined = " | ".join(errors) if errors else "未知错误"
@@ -393,7 +389,7 @@ class RelayClient:
         prompt = build_remix_prompt(self.settings.remix_prompt)
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
-        size, _upscale = resolve_remix_size(self.settings.image_size)
+        size = official_image_size(self.settings.image_size)
         edits = (
             "/v1/images/edits",
             {

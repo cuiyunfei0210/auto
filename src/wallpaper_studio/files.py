@@ -118,6 +118,18 @@ def unique_path(directory: Path, stem: str, suffix: str) -> Path:
     return candidate
 
 
+def clear_images_in_dir(folder: Path) -> int:
+    """Delete previously remixed image files so this run's count matches the source."""
+    removed = 0
+    for path in list_images(folder):
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def fit_image_bytes(image_bytes: bytes, size: tuple[int, int], suffix: str = ".png") -> bytes:
     """Cover-crop and resize to an exact width/height. Used after gpt-image-2's native sizes."""
     from io import BytesIO

@@ -337,16 +337,16 @@ async def upload_batches(
                 f"本账号 {len(batch.images)} 张"
             )
             await client.start_account(batch.account, batch.proxy)
-            for image_index, image in enumerate(batch.images, start=1):
-                title = image.stem
+            for image_index, item in enumerate(batch.images, start=1):
+                title = item.title
                 try:
-                    await client.upload_image(image, title, site.category_value)
+                    await client.upload_image(item.path, title, site.category_value)
                     uploaded += 1
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # noqa: BLE001 - skip this file and keep the queue moving
                     skipped += 1
-                    emit(f"跳过 {image.name}：{_upload_error_text(exc)}")
+                    emit(f"跳过 {item.path.name}：{_upload_error_text(exc)}")
                     emit("已跳过，继续下一张")
                 if image_index < len(batch.images) and batch.account.interval_seconds > 0:
                     emit(f"等待 {batch.account.interval_seconds:.0f} 秒后上传下一张")

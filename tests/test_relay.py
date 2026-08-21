@@ -63,10 +63,10 @@ def test_official_image_size_maps_1k():
     assert official_image_size("4K") == "1536x1024"
 
 
-def test_resolve_remix_size_upscales_2k_and_4k():
-    assert resolve_remix_size("2K") == ("1536x1024", (2560, 1440))
-    assert resolve_remix_size("4K") == ("1536x1024", (3840, 2160))
-    assert resolve_remix_size("1920x1080") == ("1536x1024", (1920, 1080))
+def test_resolve_remix_size_does_not_upscale():
+    assert resolve_remix_size("2K") == ("1536x1024", None)
+    assert resolve_remix_size("4K") == ("1536x1024", None)
+    assert resolve_remix_size("1920x1080") == ("1536x1024", None)
     assert resolve_remix_size("1536x1024") == ("1536x1024", None)
     assert resolve_remix_size("1K") == ("1024x1024", None)
 
@@ -257,7 +257,7 @@ def test_do_not_sunset_still_gets_anti_dusk_guard():
     assert not prompt_asks_for_sunset("no sunset, use noon light")
 
 
-def test_remix_upscales_native_2k_canvas(tmp_path: Path):
+def test_remix_keeps_native_size_when_user_asks_2k(tmp_path: Path):
     from PIL import Image
 
     source = make_png(tmp_path / "night.png")
@@ -277,4 +277,35 @@ def test_remix_upscales_native_2k_canvas(tmp_path: Path):
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
     with Image.open(dest) as image:
-        assert image.size == (2560, 1440)
+        assert image.size == (1536, 1024)
+
+
+def test_generate_title_sends_the_image(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "红旗街景"}}]},
+        )
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", filename_model="gpt-4o-mini"),
+        transport=httpx.MockTransport(handler),
+    )
+    title = client.generate_title("night", source)
+    assert title == "红旗街景"
+    content = seen[0]["messages"][1]["content"]
+    assert isinstance(content, list)
+    assert content[1]["type"] == "image_url"
+    assert content[1]["image_url"]["url"].startswith("data:image")
+
+
+def test_resolve_title_model_skips_image_models():
+    client = RelayClient(ApiSettings(filename_model="gpt-image-2", remix_chat_model="gpt-image-2"))
+    assert client.resolve_title_model() == ""
+    client = RelayClient(ApiSettings(filename_model="gpt-image-2", remix_chat_model="gpt-4o-mini"))
+    assert client.resolve_title_model() == "gpt-4o-mini"

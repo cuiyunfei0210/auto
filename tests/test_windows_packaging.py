@@ -15,6 +15,7 @@ def test_windows_packaging_files_exist():
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
     assert ".local-browsers" in spec
     assert 'sys.platform != "darwin"' in spec
+    assert "console=False" in spec
     workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
     assert "if: runner.os != 'macOS'" in workflow
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
@@ -28,13 +29,18 @@ def test_windows_packaging_files_exist():
     assert "parseJson" in ui
     assert "任务已开始" in ui
     assert "remix_progress" in ui
+    assert "/api/shutdown" in ui
+    assert "btn-quit" in ui
     html = (root / "src" / "wallpaper_studio" / "web" / "index.html").read_text(encoding="utf-8")
     assert "待二创" in html
+    assert "退出程序" in html
     assert "??" not in ui
     assert "replaceAll" not in ui
-    html = (root / "src" / "wallpaper_studio" / "web" / "index.html").read_text(encoding="utf-8")
     assert "studio.js" in html
     assert "charset=" in html
+    launcher = (root / "src" / "wallpaper_studio" / "__main__.py").read_text(encoding="utf-8")
+    assert "access_log=False" in launcher
+    assert "btn-quit" in html
 
 
 def test_studio_js_has_valid_syntax():

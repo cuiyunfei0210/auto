@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from wallpaper_studio.files import empty_source_message, list_images, sanitize_filename, unique_path
+from wallpaper_studio.files import clear_images_in_dir, empty_source_message, list_images, sanitize_filename, unique_path
 from wallpaper_studio.models import Account, NetworkSettings
 from wallpaper_studio.scheduler import (
     ProxyAssignmentError,
@@ -47,6 +47,17 @@ def test_unique_path_increments(tmp_path: Path):
     assert second.name == "sky-2.png"
 
 
+def test_clear_images_in_dir_removes_previous_outputs(tmp_path: Path):
+    (tmp_path / "keep.txt").write_text("notes")
+    (tmp_path / "old.png").write_bytes(b"x")
+    (tmp_path / "old-2.jpg").write_bytes(b"y")
+    removed = clear_images_in_dir(tmp_path)
+    assert removed == 2
+    assert not (tmp_path / "old.png").exists()
+    assert not (tmp_path / "old-2.jpg").exists()
+    assert (tmp_path / "keep.txt").exists()
+
+
 def test_plan_finishes_one_account_before_next(tmp_path: Path):
     images = [tmp_path / f"{index}.png" for index in range(5)]
     accounts = [
@@ -56,9 +67,9 @@ def test_plan_finishes_one_account_before_next(tmp_path: Path):
     ]
     batches = plan_account_batches(images, accounts)
     assert [batch.account.username for batch in batches] == ["a", "b", "c"]
-    assert [path.name for path in batches[0].images] == ["0.png", "1.png"]
-    assert [path.name for path in batches[1].images] == ["2.png", "3.png"]
-    assert [path.name for path in batches[2].images] == ["4.png"]
+    assert [item.path.name for item in batches[0].images] == ["0.png", "1.png"]
+    assert [item.path.name for item in batches[1].images] == ["2.png", "3.png"]
+    assert [item.path.name for item in batches[2].images] == ["4.png"]
 
 
 def test_proxy_rotates_every_five_accounts():

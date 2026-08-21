@@ -160,7 +160,7 @@ async function parseJson(res) {
     return JSON.parse(text);
   } catch (ignore) {
     const snippet = String(text || "").replace(/\s+/g, " ").slice(0, 160);
-    throw new Error(`服务器出错（${res.status}）。${snippet || "请看黑色窗口里的报错。"}`);
+    throw new Error(`服务器出错（${res.status}）。${snippet || "请看右侧日志，或 data\\studio.log。"}`);
   }
 }
 
@@ -339,6 +339,15 @@ bindClick("btn-stop", async () => {
     notify(`停止失败：${err && err.message ? err.message : err}`);
   }
 });
+bindClick("btn-quit", async () => {
+  if (!window.confirm("退出壁纸工坊？未完成的任务会停止。")) return;
+  try {
+    await fetch("/api/shutdown", { method: "POST" });
+  } catch (ignore) {
+    /* the process may close the connection */
+  }
+  notify("程序正在退出，可以关闭这个网页。");
+});
 
 if ($("site_preset")) {
   $("site_preset").onchange = () => {
@@ -424,7 +433,7 @@ async function refreshCounts() {
 refresh()
   .catch((err) => {
     const message = err && err.message ? err.message : String(err);
-    renderLogs([`界面加载失败：${message}`, "请刷新浏览器，或确认黑色窗口还在。"]);
+    renderLogs([`界面加载失败：${message}`, "请刷新浏览器，或重新打开 WallpaperStudio.exe。"]);
   })
   .finally(connectWs);
 

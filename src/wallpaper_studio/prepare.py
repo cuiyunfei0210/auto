@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
-from shutil import copy2
 
-from wallpaper_studio.files import empty_source_message, list_images, sanitize_filename, unique_path
-from wallpaper_studio.models import AppConfig
-from wallpaper_studio.relay import ApiError, RelayClient, chat_model_supports_titles, friendly_error_message, resolve_remix_size
+from wallpaper_studio.files import clear_images_in_dir, empty_source_message, list_images, sanitize_filename
+from wallpaper_studio.models import AppConfig, PreparedImage
+from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message, official_image_size
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
@@ -17,10 +15,10 @@ def prepare_images(
     config: AppConfig,
     log: LogFn | None = None,
     progress: ProgressFn | None = None,
-) -> list[Path]:
-    """Build the folder that will be uploaded.
+) -> list[PreparedImage]:
+    """Build the list of images that will be uploaded.
 
-    upload_only: images from the source folder, optionally renamed via API.
+    upload_only: upload files from the source folder in place (do not copy them).
     remix_then_upload: call the relay image-edit API, save into the output folder.
     """
     emit = log or (lambda _message: None)
@@ -30,20 +28,15 @@ def prepare_images(
     if not images:
         raise FileNotFoundError(empty_source_message(src))
 
-    prepared: list[Path] = []
+    prepared: list[PreparedImage] = []
     client = RelayClient(config.api) if _needs_api(config) else None
-    can_rename = (
-        client is not None
-        and config.api.filename_prompt.strip()
-        and chat_model_supports_titles(config.api.filename_model)
-    )
-    if (
-        client is not None
-        and config.api.filename_prompt.strip()
-        and not can_rename
-    ):
+    title_model = client.resolve_title_model() if client is not None else ""
+    can_rename = bool(client is not None and config.api.filename_prompt.strip() and title_model)
+    if client is not None and config.api.filename_prompt.strip() and not can_rename:
         emit(
-            f"文件名模型 {config.api.filename_model} 不能写标题，全部沿用原文件名"
+            "文件名模型必须是对话/识图模型才能根据图片写标题。"
+            f"当前填的是 {config.api.filename_model or config.api.remix_chat_model or '空'}，"
+            "gpt-image-2 不能起名。请改成 Key 组里有的对话模型，例如 gpt-4o-mini。"
         )
 
     remaining = len(images) if config.mode == "remix_then_upload" else 0
@@ -51,24 +44,22 @@ def prepare_images(
     if progress:
         progress(remaining, total)
     if config.mode == "remix_then_upload":
+        removed = clear_images_in_dir(dest)
+        if removed:
+            emit(f"已清空输出目录里上次留下的 {removed} 张图，本轮二创数量会和源图一致。")
         emit("二创会按你填的提示词改图，不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
-        api_size, upscale = resolve_remix_size(config.api.image_size)
-        if upscale:
-            emit(
-                f"gpt-image-2 只能原生出 1024/1536，将先生成 {api_size}，再放大到 {upscale[0]}x{upscale[1]}。"
-            )
-        else:
-            emit(f"出图尺寸 {api_size}。填 2K/4K/1920x1080 才会放大；模型本身没有真正的 4K。")
+        api_size = official_image_size(config.api.image_size)
+        emit(f"gpt-image-2 只能原生出 1024×1024 / 1536×1024 / 1024×1536，本轮按 {api_size} 出图，不再放大（放大会发糊）。")
 
     for image in images:
         title = image.stem
         if can_rename:
             assert client is not None
             try:
-                title = client.generate_title(image.stem)
-                emit(f"新文件名：{title}")
+                title = client.generate_title(image.stem, image)
+                emit(f"新标题：{title}")
             except Exception as exc:  # noqa: BLE001 - keep going with original name
-                emit(f"生成文件名失败，沿用原名 {image.stem}：{exc}")
+                emit(f"生成标题失败，沿用原名 {image.stem}：{exc}")
                 title = sanitize_filename(image.stem)
 
         title = sanitize_filename(title, fallback=image.stem)
@@ -76,20 +67,19 @@ def prepare_images(
             assert client is not None
             emit(f"正在二创 {image.name} …")
             try:
-                prepared.append(client.remix_image(image, dest, title))
+                remixed = client.remix_image(image, dest, title)
             except ApiError as exc:
                 raise ApiError(
                     f"{image.name} 二创失败。{friendly_error_message(str(exc))}"
                 ) from exc
-            emit(f"已保存二创结果 {prepared[-1].name}")
+            prepared.append(PreparedImage(path=remixed, title=title))
+            emit(f"已保存二创结果 {remixed.name}")
             remaining -= 1
             if progress:
                 progress(remaining, total)
         else:
-            target = unique_path(dest, title, image.suffix.lower())
-            copy2(image, target)
-            prepared.append(target)
-            emit(f"待上传：{target.name}")
+            prepared.append(PreparedImage(path=image, title=title))
+            emit(f"待上传：{image.name}（标题：{title}）")
     return prepared
 
 

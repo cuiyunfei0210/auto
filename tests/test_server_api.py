@@ -189,6 +189,14 @@ def test_state_ignores_other_pc_source_path(studio_home, monkeypatch):
     assert "Administrator" not in body["source_dir"]
 
 
+def test_shutdown_endpoint_stops_without_killing_tests(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    stopped = client.post("/api/shutdown")
+    assert stopped.status_code == 200
+    assert stopped.json()["ok"] is True
+
+
 def test_state_error_payload_is_json(studio_home, monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("scan exploded")

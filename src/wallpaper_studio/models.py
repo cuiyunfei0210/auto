@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
@@ -44,10 +45,10 @@ class ApiSettings(BaseModel):
     password: str = "123123"
     remix_model: str = "gpt-image-2"
     remix_chat_model: str = "gpt-image-2"
-    filename_model: str = "gpt-image-2"
+    filename_model: str = ""
     remix_prompt: str = DEFAULT_REMIX_PROMPT
     filename_prompt: str = "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes."
-    image_size: str = "1920x1080"
+    image_size: str = "1536x1024"
 
     @field_validator("remix_prompt", mode="before")
     @classmethod
@@ -227,9 +228,15 @@ class UploadTask(BaseModel):
     proxy: str | None = None
 
 
+@dataclass(frozen=True)
+class PreparedImage:
+    path: Path
+    title: str
+
+
 class AccountBatch(BaseModel):
     account: Account
-    images: list[Path]
+    images: list[PreparedImage]
     proxy: str | None = None
 
     model_config = {"arbitrary_types_allowed": True}

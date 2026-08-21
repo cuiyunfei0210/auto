@@ -1,9 +1,10 @@
 import pytest
 
+from wallpaper_studio.files import list_images
 from wallpaper_studio.models import Account, ApiSettings, AppConfig, PathSettings
 from wallpaper_studio.prepare import prepare_images
 from wallpaper_studio.relay import ApiError
-from wallpaper_studio.storage import save_config, source_dir
+from wallpaper_studio.storage import output_dir, save_config, source_dir
 from tests.helpers import make_png
 
 
@@ -19,7 +20,7 @@ def test_prepare_translates_image_generation_error(studio_home, monkeypatch):
 
     monkeypatch.setattr(
         "wallpaper_studio.prepare.RelayClient.generate_title",
-        lambda self, stem: "静谧星河夜语",
+        lambda self, stem, image=None: "静谧星河夜语",
     )
 
     def boom(self, source, dest_dir, title):
@@ -42,13 +43,14 @@ def test_prepare_skips_title_api_for_image_models(studio_home, monkeypatch):
     make_png(source_dir(config) / "night.png")
     logs: list[str] = []
 
-    def boom(self, stem):
+    def boom(self, stem, image=None):
         raise AssertionError("title API should not be called for gpt-image-2")
 
     monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.generate_title", boom)
     prepared = prepare_images(config, logs.append)
-    assert prepared[0].name.startswith("night")
-    assert any("不能写标题" in line for line in logs)
+    assert prepared[0].path.name.startswith("night")
+    assert prepared[0].title == "night"
+    assert any("根据图片写标题" in line for line in logs)
 
 
 def test_prepare_reads_nested_source_image(studio_home):
@@ -61,7 +63,8 @@ def test_prepare_reads_nested_source_image(studio_home):
     make_png(studio_home / "source" / "batch1" / "night.png")
     prepared = prepare_images(config)
     assert len(prepared) == 1
-    assert prepared[0].exists()
+    assert prepared[0].path.exists()
+    assert prepared[0].path.parent == studio_home / "source" / "batch1"
 
 
 def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
@@ -90,3 +93,76 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
     assert ticks[1] == (1, 2)
     assert ticks[2] == (0, 2)
     assert any("不会强制黄昏" in line for line in logs)
+    assert any("不再放大" in line for line in logs)
+
+
+def test_upload_only_keeps_source_images_and_does_not_copy(studio_home):
+    config = AppConfig(
+        mode="upload_only",
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    source = make_png(source_dir(config) / "keep.png")
+    dest = output_dir(config)
+    dest.mkdir(parents=True, exist_ok=True)
+    prepared = prepare_images(config)
+    assert len(prepared) == 1
+    assert prepared[0].path == source
+    assert prepared[0].title == "keep"
+    assert list_images(dest) == []
+
+
+def test_remix_clears_leftover_output_so_count_matches_source(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="remix_then_upload",
+        api=ApiSettings(api_key="sk-test"),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=2, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(source_dir(config) / "one.png")
+    dest = output_dir(config)
+    dest.mkdir(parents=True, exist_ok=True)
+    leftover = dest / "one-2.png"
+    leftover.write_bytes(b"old")
+    (dest / "stale.png").write_bytes(b"old")
+
+    def fake_remix(self, source, dest_dir, title):
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{title}.png"
+        path.write_bytes(source.read_bytes())
+        return path
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
+    logs: list[str] = []
+    prepared = prepare_images(config, logs.append)
+    assert len(prepared) == 1
+    assert not leftover.exists()
+    assert not (dest / "stale.png").exists()
+    assert prepared[0].path.name == "one.png"
+    assert any("上次留下" in line for line in logs)
+
+
+def test_prepare_sends_image_to_title_model(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="upload_only",
+        api=ApiSettings(api_key="sk-test", filename_model="gpt-4o-mini"),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    source = make_png(source_dir(config) / "night.png")
+    seen: dict = {}
+
+    def fake_title(self, stem, image=None):
+        seen["stem"] = stem
+        seen["image"] = image
+        return "红旗街景黄昏"
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.generate_title", fake_title)
+    prepared = prepare_images(config)
+    assert seen["stem"] == "night"
+    assert seen["image"] == source
+    assert prepared[0].title == "红旗街景黄昏"
+    assert prepared[0].path == source

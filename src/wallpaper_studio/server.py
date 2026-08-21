@@ -27,6 +27,7 @@ from wallpaper_studio.relay import friendly_error_message
 from wallpaper_studio.preflight import format_start_problems, start_problems
 
 WEB_DIR = web_dir()
+runtime: dict[str, Any] = {"server": None, "lock": None}
 
 
 class StudioState:
@@ -227,6 +228,27 @@ def create_app() -> FastAPI:
         if task and not task.done():
             task.cancel()
             await state.emit("正在停止…")
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/shutdown")
+    async def api_shutdown() -> JSONResponse:
+        task = state.task
+        if task and not task.done():
+            task.cancel()
+        lock = runtime.get("lock")
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+        async def stop() -> None:
+            await asyncio.sleep(0.2)
+            server = runtime.get("server")
+            if server is not None:
+                server.should_exit = True
+
+        asyncio.create_task(stop())
         return JSONResponse({"ok": True})
 
     @app.websocket("/ws")
