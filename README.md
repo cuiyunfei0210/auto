@@ -12,10 +12,10 @@
 - `打开壁纸工坊.bat`
 - `start.bat`
 
-第一次会自动创建环境、安装组件和 Chromium。装完后浏览器会打开 `http://127.0.0.1:8765`。  
+第一次会自动创建环境、安装组件和 Chromium。装完后会弹出 **壁纸工坊程序窗口**，不再打开系统浏览器。  
 用 `打开壁纸工坊.bat` 时，用完之前不要关掉那个黑色命令行窗口。  
-打包好的 `WallpaperStudio.exe` **没有黑色窗口**，用完请在网页里点 **退出程序**。  
-如果网页打不开：到任务管理器结束 `WallpaperStudio.exe`，重新打开。不要反复双击。
+打包好的 `WallpaperStudio.exe` **没有黑色窗口**，界面就在程序里；用完关窗口，或点「退出程序」。  
+如果窗口打不开：到任务管理器结束 `WallpaperStudio.exe`，重新打开。不要反复双击。
 
 也可以自己打包成桌面 exe，步骤如下。
 
@@ -29,12 +29,14 @@
 4. **双击** `build-windows.bat`，等几分钟，不要关窗口。
 5. 结束后会自动打开文件夹  
    `项目目录\dist\WallpaperStudio\`
-6. **双击** `WallpaperStudio.exe`。浏览器会打开 `http://127.0.0.1:8765`。  
-   打包版没有黑色窗口，用完请点网页上的「退出程序」。
+6. **双击** `WallpaperStudio.exe`。会弹出程序窗口，不依赖系统浏览器。  
+   用完关窗口即可。
 
 以后日常使用只需要第 6 步。可以把 `dist\WallpaperStudio` 整个文件夹拷到桌面；**不要只拷一个 exe**，同目录文件要一起带着。
 
 配置和图片在 exe 旁边的 `data` 文件夹里。
+
+如果提示缺少 WebView2，安装 [Edge WebView2 运行库](https://go.microsoft.com/fwlink/p/?LinkId=2124703)（装了 Edge 的电脑一般已经有）。
 
 ## GitHub 自动打包（和 Actions 里的 Build client app 一样）
 
@@ -116,9 +118,11 @@ python run.py
 ## 命令
 
 ```bash
+python run.py
+python run.py --web
 python run.py --no-browser
 python run.py --once
 pytest
 ```
 
-`--once` 按当前配置跑一轮，不打开界面。
+默认打开程序窗口。`--web` 用系统浏览器调试；`--no-browser` 只开后台服务；`--once` 按当前配置跑一轮，不打开界面。

@@ -207,11 +207,19 @@ def test_state_ignores_other_pc_source_path(studio_home, monkeypatch):
 
 
 def test_shutdown_endpoint_stops_without_killing_tests(studio_home):
+    from wallpaper_studio.server import runtime
+
     reset_demo_sessions()
-    client = TestClient(create_app())
-    stopped = client.post("/api/shutdown")
-    assert stopped.status_code == 200
-    assert stopped.json()["ok"] is True
+    closed: list[bool] = []
+    runtime["close_ui"] = lambda: closed.append(True)
+    try:
+        client = TestClient(create_app())
+        stopped = client.post("/api/shutdown")
+        assert stopped.status_code == 200
+        assert stopped.json()["ok"] is True
+        assert closed == [True]
+    finally:
+        runtime.pop("close_ui", None)
 
 
 def test_state_error_payload_is_json(studio_home, monkeypatch):

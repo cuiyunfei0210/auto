@@ -16,6 +16,8 @@ dependencies = [
   "pillow>=10.4.0",
   "pydantic>=2.9.0",
   "python-multipart>=0.0.9",
+  "pywebview>=5.1",
+  "pythonnet>=3.0.3; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

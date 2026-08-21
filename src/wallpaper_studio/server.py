@@ -276,6 +276,12 @@ def create_app() -> FastAPI:
                 lock.release()
             except Exception:
                 pass
+        closer = runtime.get("close_ui")
+        if callable(closer):
+            try:
+                closer()
+            except Exception:
+                pass
 
         async def stop() -> None:
             await asyncio.sleep(0.2)

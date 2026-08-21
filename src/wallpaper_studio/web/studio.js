@@ -2,7 +2,7 @@ const headings = {
   job: ["任务", "先准备图片，再按账号队列模拟网页上传。"],
   folders: ["文件夹", "源图和一个单独的输出目录。"],
   accounts: ["账号", "一个账号传完再换下一个；每个账号尽量使用不同出口。"],
-  site: ["网页上传", "用浏览器填登录表和上传表，不调用壁纸站后台接口。"],
+  site: ["网页上传", "上传时用内置浏览器填登录表和上传表，不调用壁纸站后台接口。"],
   api: ["二创 API", "对接中转站。可随时跳过这一步。"],
 };
 
@@ -397,7 +397,7 @@ bindClick("btn-quit", async () => {
   } catch (ignore) {
     /* the process may close the connection */
   }
-  notify("程序正在退出，可以关闭这个网页。");
+  notify("程序正在退出。");
 });
 
 if ($("site_preset")) {
@@ -421,8 +421,8 @@ if ($("relay_preset")) {
 }
 } catch (err) {
   const log = $("log");
-  if (log) log.textContent = "界面脚本加载失败，请更新 Edge 或改用 Chrome。";
-  window.alert("界面脚本加载失败，请更新 Edge 或改用 Chrome。\n" + (err && err.message ? err.message : err));
+  if (log) log.textContent = "界面脚本加载失败，请重新打开程序。";
+  window.alert("界面脚本加载失败，请重新打开程序。\n" + (err && err.message ? err.message : err));
 }
 
 function connectWs() {
@@ -499,7 +499,7 @@ async function refreshCounts() {
 refresh()
   .catch((err) => {
     const message = err && err.message ? err.message : String(err);
-    renderLogs([`界面加载失败：${message}`, "请刷新浏览器，或重新打开 WallpaperStudio.exe。"]);
+    renderLogs([`界面加载失败：${message}`, "请重新打开壁纸工坊。"]);
   })
   .finally(connectWs);
 

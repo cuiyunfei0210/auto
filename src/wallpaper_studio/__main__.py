@@ -20,11 +20,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="壁纸二创与顺序上传工具")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--web", action="store_true", help="用系统浏览器打开界面（调试）")
+    parser.add_argument("--no-browser", action="store_true", help="只开后台服务，不打开窗口")
     parser.add_argument("--once", action="store_true", help="不打开界面，按当前配置跑一轮")
     args = parser.parse_args()
 
     from wallpaper_studio.browser import configure_playwright_env
+    from wallpaper_studio.desktop import (
+        DesktopWindowError,
+        close_native_windows,
+        open_native_window,
+        should_open_native_window,
+    )
     from wallpaper_studio.instance_lock import (
         InstanceLock,
         InstanceLockError,
@@ -49,17 +56,18 @@ def main() -> None:
         return
 
     url = f"http://{args.host}:{args.port}"
+    native = should_open_native_window(web=args.web, no_browser=args.no_browser)
     lock = InstanceLock()
     try:
         lock.acquire()
     except InstanceLockError:
         try:
             lock.take_over_stale(url)
-            print("上次程序没有正常退出，已重新启动。请在网页里点「退出程序」关闭。")
+            print("上次程序没有正常退出，已重新启动。")
         except InstanceLockError:
             print(already_running_message(url))
-            _alert(already_running_message(url))
-            if not args.no_browser:
+            _alert(already_running_message(url), icon="info")
+            if args.web and not args.no_browser:
                 open_ui(url)
             _pause_if_windows()
             sys.exit(1)
@@ -71,12 +79,14 @@ def main() -> None:
         print()
         print("=" * 48)
         print("  壁纸工坊已启动")
-        print(f"  界面地址：{url}")
-        print("  请在网页里点「退出程序」关闭。打包版没有黑色窗口。")
+        if native:
+            print("  界面在程序窗口里，不打开系统浏览器。")
+        elif args.web:
+            print(f"  界面地址：{url}")
+        else:
+            print(f"  后台服务：{url}")
         print("=" * 48)
         print()
-        if not args.no_browser:
-            threading.Thread(target=wait_and_open_ui, args=(url,), daemon=True).start()
         config = uvicorn.Config(
             app,
             host=args.host,
@@ -88,11 +98,33 @@ def main() -> None:
         server.install_signal_handlers = False
         runtime["server"] = server
         runtime["lock"] = lock
+        runtime["close_ui"] = close_native_windows
+
+        if native:
+            worker = threading.Thread(target=server.run, name="studio-http", daemon=True)
+            worker.start()
+
+            def stop_server() -> None:
+                server.should_exit = True
+
+            try:
+                open_native_window(url, on_closed=stop_server)
+            except DesktopWindowError as exc:
+                print(str(exc))
+                _alert(str(exc))
+                server.should_exit = True
+                sys.exit(1)
+            finally:
+                server.should_exit = True
+                worker.join(timeout=8)
+            return
+
+        if args.web:
+            threading.Thread(target=wait_and_open_ui, args=(url,), daemon=True).start()
         server.run()
     except OSError as exc:
         print(f"无法启动界面服务：{exc}")
-        print("请检查 8765 端口是否被占用，或在任务管理器结束 WallpaperStudio.exe 后再打开。")
-        print(f"也可以先试着打开：{url}")
+        print("请检查端口是否被占用，或在任务管理器结束 WallpaperStudio.exe 后再打开。")
         _alert(f"无法启动界面服务：{exc}\n请结束旧的 WallpaperStudio.exe 后再打开。")
         _pause_if_windows()
         sys.exit(1)
@@ -118,13 +150,14 @@ def _redirect_logs() -> None:
         pass
 
 
-def _alert(message: str) -> None:
+def _alert(message: str, icon: str = "error") -> None:
     if os.name != "nt":
         return
     try:
         import ctypes
 
-        ctypes.windll.user32.MessageBoxW(0, str(message), "壁纸工坊", 0x10)
+        flags = 0x10 if icon == "error" else 0x40
+        ctypes.windll.user32.MessageBoxW(0, str(message), "壁纸工坊", flags)
     except Exception:
         pass
 

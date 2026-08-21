@@ -20,7 +20,7 @@ if not exist "%PYEXE%" (
   if errorlevel 1 goto :fail
 )
 
-"%PYEXE%" -c "import fastapi,uvicorn,playwright,httpx,PIL,pydantic" 2>nul
+"%PYEXE%" -c "import fastapi,uvicorn,playwright,httpx,PIL,pydantic,webview" 2>nul
 if errorlevel 1 (
   echo 正在安装程序组件...
   "%PYEXE%" -m pip install -U pip

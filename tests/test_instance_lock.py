@@ -39,7 +39,7 @@ def test_second_instance_is_rejected(studio_home):
 def test_already_running_message_points_at_existing_ui():
     text = already_running_message("http://127.0.0.1:8765")
     assert "只能打开一次" in text
-    assert "http://127.0.0.1:8765" in text
+    assert "任务栏" in text
     assert "任务管理器" in text
 
 

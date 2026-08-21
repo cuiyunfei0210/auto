@@ -22,6 +22,10 @@ def test_windows_packaging_files_exist():
     assert "_windows_runtime_binaries" in spec
     assert "vcruntime140.dll" in spec
     assert "python312.dll" in spec
+    assert "webview" in spec
+    assert "wallpaper_studio.desktop" in spec
+    project = (root / "pyproject.toml").read_text(encoding="utf-8")
+    assert "pywebview" in project
     workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
     assert "if: runner.os != 'macOS'" in workflow
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
@@ -55,6 +59,9 @@ def test_windows_packaging_files_exist():
     readme = (root / "packaging" / "exe-readme.txt").read_text(encoding="utf-8")
     assert "python312.dll" in readme
     assert "vc_redist.x64.exe" in readme
+    assert "程序窗口" in readme
+    assert "WebView2" in readme
+    assert "系统浏览器" in readme
 
 
 def test_studio_js_has_valid_syntax():

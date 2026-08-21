@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dynamic_libs
 
 root = Path(SPECPATH).resolve()
 web = root / "src" / "wallpaper_studio" / "web"
@@ -49,6 +49,49 @@ datas += [
     if ".local-browsers" not in Path(src).as_posix()
 ]
 binaries = collect_dynamic_libs("playwright") + _windows_runtime_binaries()
+hiddenimports = [
+    "uvicorn.logging",
+    "uvicorn.lifespan.on",
+    "uvicorn.loops.auto",
+    "uvicorn.protocols.http.auto",
+    "uvicorn.protocols.websockets.auto",
+    "multipart",
+    "starlette",
+    "fastapi",
+    "playwright",
+    "playwright.sync_api",
+    "playwright.async_api",
+    "wallpaper_studio.browser",
+    "wallpaper_studio.desktop",
+    "webview",
+    "bottle",
+    "proxy_tools",
+]
+if sys.platform == "win32":
+    hiddenimports += [
+        "clr",
+        "clr_loader",
+        "pythonnet",
+        "webview.platforms.winforms",
+        "webview.platforms.edgechromium",
+    ]
+
+
+def _collect_pkg(name: str) -> None:
+    try:
+        extra_datas, extra_binaries, extra_hidden = collect_all(name)
+    except Exception:
+        return
+    datas.extend(extra_datas)
+    binaries.extend(extra_binaries)
+    hiddenimports.extend(extra_hidden)
+
+
+for _pkg in ("webview", "bottle", "proxy_tools"):
+    _collect_pkg(_pkg)
+if sys.platform == "win32":
+    for _pkg in ("pythonnet", "clr_loader"):
+        _collect_pkg(_pkg)
 
 try:
     import playwright
@@ -71,20 +114,7 @@ a = Analysis(
     pathex=[str(root / "src")],
     binaries=binaries,
     datas=datas,
-    hiddenimports=[
-        "uvicorn.logging",
-        "uvicorn.lifespan.on",
-        "uvicorn.loops.auto",
-        "uvicorn.protocols.http.auto",
-        "uvicorn.protocols.websockets.auto",
-        "multipart",
-        "starlette",
-        "fastapi",
-        "playwright",
-        "playwright.sync_api",
-        "playwright.async_api",
-        "wallpaper_studio.browser",
-    ],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

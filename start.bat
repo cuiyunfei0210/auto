@@ -19,7 +19,7 @@ if not exist "%PYEXE%" (
   if errorlevel 1 goto :fail
 )
 
-"%PYEXE%" -c "import fastapi,uvicorn,playwright,httpx,PIL,pydantic" 2>nul
+"%PYEXE%" -c "import fastapi,uvicorn,playwright,httpx,PIL,pydantic,webview" 2>nul
 if errorlevel 1 (
   echo [2/3] 正在安装程序组件...
   "%PYEXE%" -m pip install -U pip
@@ -39,7 +39,8 @@ if not exist "%VENV%\.chromium-ok" (
 )
 
 echo.
-echo 正在启动，浏览器会自动打开 http://127.0.0.1:8765
+echo 正在启动程序窗口（不会打开系统浏览器）
+echo 上传壁纸站时仍会用内置 Chromium，界面就在这个窗口里。
 echo 用完前请不要关闭这个黑窗口。
 echo.
 "%PYEXE%" "%~dp0run.py"

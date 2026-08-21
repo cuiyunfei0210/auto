@@ -21,8 +21,8 @@ class InstanceLockError(RuntimeError):
 def already_running_message(url: str) -> str:
     return (
         "程序已经在运行，同一台电脑只能打开一次。\n"
-        f"正在打开已有界面：{url}\n"
-        "如果网页打不开，请打开任务管理器结束 WallpaperStudio.exe，再重新双击。"
+        "请到任务栏点「壁纸工坊」窗口。\n"
+        "如果看不到窗口，请打开任务管理器结束 WallpaperStudio.exe，再重新双击。"
         "不要反复双击 exe。"
     )
 
