@@ -63,7 +63,7 @@
             <p class="hint" id="path-hint"></p>
             <p class="hint" id="count-hint"></p>
             <p class="hint error" id="source-hint" hidden></p>
-            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。二创默认走 newxxt 的 gpt-image-2，也可以在「二创 API」换成 aipixapi。大约要几十秒，请看右侧日志。「待二创」是还没二创完的源图张数，每完成一张减 1。打包版没有黑色窗口，用完请点「退出程序」。</p>
+            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。gpt-image-2 生图大约要几十秒，请看右侧日志。「待二创」是还没二创完的源图张数，每完成一张减 1。打包版没有黑色窗口，用完请点「退出程序」。</p>
           </article>
           <article class="card log-card">
             <h2>运行日志</h2>
@@ -199,11 +199,11 @@
             <option value="1536x1024">横图 1536×1024</option>
             <option value="1024x1536">竖图 1024×1536</option>
           </datalist>
-          <p class="hint">OpenCode 配置里的 gpt-5.x 是对话模型，不能直接当生图模型。二创请走 gpt-image-2 的 /v1/images/edits。newxxt 这组 Key 同时有 gpt-image-2 和 gpt-5.4-mini，可以生图也能根据图片写标题。aipixapi 这组 Key 只有 gpt-image-2，写标题会自动改走 newxxt。接口地址不要带 /v1。gpt-image-2 只能出 1024×1024 / 1536×1024 / 1024×1536，程序不再放大。</p>
+          <p class="hint">OpenCode 配置里的 gpt-5.x 是对话模型，不能直接当生图模型。二创请走 gpt-image-2。newxxt 这组 Key 同时有 gpt-image-2 和 gpt-5.4-mini，可以生图也能根据图片写标题。aipixapi 这组 Key 只有 gpt-image-2，写标题会自动改走 newxxt。gpt-image-2 只能出 1024×1024 / 1536×1024 / 1024×1536，程序不再放大。二创提示词以你填的为准；电影级光影、atmospheric depth 很容易出黄昏，想要别的时段请写正午、阴天、夜晚或冷色。</p>
         </article>
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260821c" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260821d" charset="utf-8"></script>
 </body>
 </html>
