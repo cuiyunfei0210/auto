@@ -6,6 +6,7 @@ import httpx
 
 from wallpaper_studio.models import DEFAULT_REMIX_PROMPT, ApiSettings
 from wallpaper_studio.relay import (
+    ApiError,
     RelayClient,
     build_remix_prompt,
     chat_model_supports_titles,
@@ -20,7 +21,9 @@ from tests.helpers import make_png
 def test_friendly_message_for_image_generation_tools_error():
     raw = "Tool choice 'image_generation' not found in 'tools' parameter."
     text = friendly_error_message(raw)
+    assert "images/generations" in text
     assert "images/edits" in text
+    assert "文生图" in text
     assert "跳过二创" in text
     assert friendly_error_message(text) == text
 
@@ -106,7 +109,84 @@ def test_remix_image_model_uses_clean_edits_endpoint(tmp_path: Path):
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
     assert dest.read_bytes() == source.read_bytes()
-    assert seen == ["/v1/images/edits"]
+    assert seen[0].endswith("/v1/images/generations")
+    assert "/v1/images/edits" in seen
+
+
+def test_remix_uses_generations_when_that_is_what_the_relay_tests(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path.endswith("/v1/images/generations"):
+            body = json.loads(request.content)
+            assert body["model"] == "gpt-image-2"
+            assert body["images"][0]["image_url"].startswith("data:image")
+            return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+        )
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert seen == ["/v1/images/generations"]
+
+
+def test_remix_falls_back_to_multipart_edits(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        content_type = request.headers.get("content-type", "")
+        kind = "multipart" if content_type.startswith("multipart/") else "json"
+        seen.append(f"{request.url.path}:{kind}")
+        if request.url.path.endswith("/v1/images/edits") and kind == "multipart":
+            return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+        )
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert "/v1/images/generations:json" in seen
+    assert "/v1/images/edits:multipart" in seen
+
+
+def test_remix_explains_that_panel_text_to_image_is_not_edits(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+        )
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        client.remix_image(source, tmp_path / "out", "星河")
+    except ApiError as exc:
+        text = str(exc)
+    else:
+        raise AssertionError("expected remix to fail")
+    assert "文生图" in text
+    assert "images/edits" in text
+    assert "跳过二创" in text
 
 
 def test_remix_retries_transient_upstream_errors(tmp_path: Path, monkeypatch):
@@ -239,7 +319,7 @@ def test_empty_remix_prompt_sends_strong_restyle_instruction():
     settings.remix_prompt = "   "
     client = RelayClient(settings)
     path, payload = client._remix_requests("data:image/png;base64,xx", "image/png")[0]
-    assert path == "/v1/images/edits"
+    assert path == "/v1/images/generations"
     assert payload["prompt"].startswith("Primary instruction:")
     assert "禁止原样" in payload["prompt"]
     assert "near-identical" in payload["prompt"]

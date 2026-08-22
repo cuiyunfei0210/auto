@@ -33,9 +33,13 @@ def friendly_error_message(raw: str) -> str:
         )
     if "image_generation" in lowered and "tools" in lowered:
         return (
-            "中转站的 /v1/images 生图通道仍在报 Tool choice 'image_generation' not found in 'tools' parameter。"
-            "程序已改走干净的 /v1/images/edits（生图模型用 gpt-image-2），对话模型请填这个 Key 组实际有的模型。"
-            "当前这组 Key 常见只有 gpt-image-2，不能用来写标题。实在不行再暂时改用「跳过二创」。"
+            "中转站后台「测试账号」走的是 /v1/images/generations（文生图，不带原图），"
+            "能出小狗照片只说明文生图通了，不能说明二创通了。"
+            "壁纸工坊二创要按原图改图，会打 /v1/images/edits；"
+            "这条改图通道仍在报 Tool choice 'image_generation' not found in 'tools'。"
+            "请让中转站给 gpt-image-2 打开「改图 / images/edits」。"
+            "程序也会同时试带原图的 /v1/images/generations。"
+            "还不行就暂时改用「跳过二创」。"
         )
     if "xmapi.site" in lowered and ("生图" in text or "images" in lowered or "线路" in text):
         return (
@@ -289,6 +293,11 @@ class RelayClient:
             "Content-Type": "application/json",
         }
 
+    def _auth_headers(self) -> dict[str, str]:
+        if not self._resolved_key:
+            self._resolved_key = resolve_api_key(self.settings, transport=self.transport)
+        return {"Authorization": f"Bearer {self._resolved_key}"}
+
     def _url(self, path: str) -> str:
         return normalize_api_base(self.settings.base_url) + path
 
@@ -322,6 +331,55 @@ class RelayClient:
                             self._url(path),
                             headers=self._headers(),
                             json=payload,
+                        )
+                    finally:
+                        pop_http(client)
+                return _json_or_error(response)
+            except JobStopped:
+                raise
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                if stop_requested():
+                    raise JobStopped("已手动停止") from exc
+                last_error = ApiError(f"中转站网络超时或中断：{exc}")
+            except ApiError as exc:
+                last_error = exc
+                if not is_transient_relay_error(str(exc)):
+                    raise
+            except Exception as exc:
+                if stop_requested():
+                    raise JobStopped("已手动停止") from exc
+                raise
+            if attempt + 1 >= attempts:
+                break
+            wait_or_stop(2 * (attempt + 1))
+        assert last_error is not None
+        raise last_error
+
+    def _post_multipart(
+        self,
+        path: str,
+        *,
+        files: dict,
+        data: dict,
+        retries: int = 0,
+    ) -> dict:
+        kwargs: dict = {"timeout": self.timeout}
+        if self.transport is not None:
+            kwargs["transport"] = self.transport
+        last_error: Exception | None = None
+        attempts = max(1, retries + 1)
+        for attempt in range(attempts):
+            if stop_requested():
+                raise JobStopped("已手动停止")
+            try:
+                with httpx.Client(**kwargs) as client:
+                    push_http(client)
+                    try:
+                        response = client.post(
+                            self._url(path),
+                            headers=self._auth_headers(),
+                            data=data,
+                            files=files,
                         )
                     finally:
                         pop_http(client)
@@ -406,6 +464,18 @@ class RelayClient:
         data_url = f"data:{mime};base64,{encoded}"
         errors: list[str] = []
         _api_size, target = resolve_remix_size(self.settings.image_size)
+        prompt = build_remix_prompt(self.settings.remix_prompt)
+        image_model = self.settings.remix_model.strip() or "gpt-image-2"
+        size = official_image_size(self.settings.image_size)
+
+        def _save(image_bytes: bytes, suffix: str) -> Path:
+            if target:
+                image_bytes = fit_image_bytes(image_bytes, target, suffix)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = unique_path(dest_dir, title, suffix)
+            dest.write_bytes(image_bytes)
+            return dest
+
         for path, payload in self._remix_requests(data_url, mime):
             try:
                 data = self._post_json(path, payload, retries=3)
@@ -413,12 +483,21 @@ class RelayClient:
             except ApiError as exc:
                 errors.append(f"{path}: {exc}")
                 continue
-            if target:
-                image_bytes = fit_image_bytes(image_bytes, target, suffix)
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            dest = unique_path(dest_dir, title, suffix)
-            dest.write_bytes(image_bytes)
-            return dest
+            return _save(image_bytes, suffix)
+
+        for path in ("/v1/images/generations", "/v1/images/edits"):
+            try:
+                data = self._post_multipart(
+                    path,
+                    files={"image": (source.name, raw, mime)},
+                    data={"model": image_model, "prompt": prompt, "size": size, "n": "1"},
+                    retries=1,
+                )
+                image_bytes, suffix = extract_image_payload(data, source.suffix)
+                return _save(image_bytes, suffix)
+            except ApiError as exc:
+                errors.append(f"{path}(multipart): {exc}")
+
         combined = " | ".join(errors) if errors else "未知错误"
         raise ApiError(friendly_error_message(combined))
 
@@ -427,6 +506,20 @@ class RelayClient:
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
         size = official_image_size(self.settings.image_size)
+        gen_base = {
+            "model": image_model,
+            "prompt": prompt,
+            "size": size,
+            "n": 1,
+        }
+        generations = (
+            "/v1/images/generations",
+            {**gen_base, "images": [{"image_url": data_url}], "image": data_url},
+        )
+        generations_image = (
+            "/v1/images/generations",
+            {**gen_base, "image": data_url},
+        )
         edits = (
             "/v1/images/edits",
             {
@@ -436,10 +529,20 @@ class RelayClient:
                 "size": size,
             },
         )
+        edits_single = (
+            "/v1/images/edits",
+            {
+                "model": image_model,
+                "prompt": prompt,
+                "image": data_url,
+                "size": size,
+            },
+        )
+        image_attempts = [generations, generations_image, edits, edits_single]
         if not chat_model_supports_titles(chat_model):
-            # gpt-image-2 is not a chat model. xmapi.site accepts a clean edits payload;
-            # responses/chat on this key return 503 / "not supported".
-            return [edits]
+            # gpt-image-2 is not a chat model. Prefer the generations channel
+            # that relay admin panels test, then fall back to edits.
+            return image_attempts
         tool = {
             "type": "image_generation",
             "action": "edit",
@@ -485,7 +588,7 @@ class RelayClient:
                     "modalities": ["text", "image"],
                 },
             ),
-            edits,
+            *image_attempts,
         ]
 
 

@@ -203,11 +203,11 @@
             <option value="1024x1536">模型原生竖图 1024×1536</option>
             <option value="1024x1024">方图 1024×1024</option>
           </datalist>
-          <p class="hint">OpenCode 配置里的 gpt-5.x 是对话模型，不能直接当生图模型。二创请走 gpt-image-2。newxxt 这组 Key 同时有 gpt-image-2 和 gpt-5.4-mini，可以生图也能根据图片写标题。aipixapi 这组 Key 只有 gpt-image-2，写标题会自动改走 newxxt。gpt-image-2 原生只能出 1024×1024 / 1536×1024 / 1024×1536；出图尺寸填 1920×1080、2K、4K 时，会先按最接近的原生尺寸出图，再放大到你填的宽高（CQwall 最少 1920×1080）。二创提示词以你填的为准；电影级光影、atmospheric depth 很容易出黄昏，想要别的时段请写正午、阴天、夜晚或冷色。标题语言以「文件名提示词」为准，要英文就写 English title；程序不再强制中文。</p>
+          <p class="hint">中转站后台「测试账号」出小狗照片，测的是 /v1/images/generations 文生图，不等于按原图改图通了。对话测 gpt-5.4-mini 只说明能写标题。二创会先带原图走文生图通道，不通再试 /v1/images/edits。中转站邮箱只在自动取 Key 时用，不要填进 CQwall 账号队列。OpenCode 配置里的 gpt-5.x 是对话模型，不能直接当生图模型。二创请走 gpt-image-2。newxxt 这组 Key 同时有 gpt-image-2 和 gpt-5.4-mini，可以生图也能根据图片写标题。aipixapi 这组 Key 只有 gpt-image-2，写标题会自动改走 newxxt。gpt-image-2 原生只能出 1024×1024 / 1536×1024 / 1024×1536；出图尺寸填 1920×1080、2K、4K 时，会先按最接近的原生尺寸出图，再放大到你填的宽高（CQwall 最少 1920×1080）。二创提示词以你填的为准；电影级光影、atmospheric depth 很容易出黄昏，想要别的时段请写正午、阴天、夜晚或冷色。标题语言以「文件名提示词」为准，要英文就写 English title；程序不再强制中文。</p>
         </article>
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260821h" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260822a" charset="utf-8"></script>
 </body>
 </html>
