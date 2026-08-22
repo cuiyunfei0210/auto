@@ -39,7 +39,11 @@ def effective_remix_prompt(value: str | None) -> str:
 
 
 NEWXXT_API_BASE = "https://api.newxxt.top"
-NEWXXT_API_KEY = "sk-beef6174c1f75a4eec5a5890a1f4ed02a3d4824ec72962cb51960d66d577c927"
+OLD_NEWXXT_API_KEYS = {
+    "sk-beef6174c1f75a4eec5a5890a1f4ed02a3d4824ec72962cb51960d66d577c927",
+}
+NEWXXT_API_KEY = "sk-ac87085afeb3d0fcf7574c86f021d5421d1f690b9dbcd1358aa9ec85ead98e29"
+NEWXXT_CHAT_KEY = "sk-dcaeb94ce3a1dd94713f43d844776a122d152585f34e7f136f62577cca3a618f"
 AIPIX_API_BASE = "https://www.aipixapi.art"
 AIPIX_API_KEY = "sk-f98dc0de44a1661c85767505b7280331dfffe9f0750457d204ea8282ff8e0d46"
 XMAP_API_BASE = "https://xmapi.site"
@@ -208,8 +212,8 @@ RELAY_PRESETS: dict[str, dict[str, str]] = {
         "remix_model": DEFAULT_IMAGE_MODEL,
         "remix_chat_model": DEFAULT_IMAGE_MODEL,
         "filename_model": DEFAULT_CHAT_MODEL,
-        "filename_base_url": "",
-        "filename_api_key": "",
+        "filename_base_url": NEWXXT_API_BASE,
+        "filename_api_key": NEWXXT_CHAT_KEY,
     },
     "aipixapi": {
         "label": "aipixapi 生图 + newxxt 起名",
@@ -221,7 +225,7 @@ RELAY_PRESETS: dict[str, dict[str, str]] = {
         "remix_chat_model": DEFAULT_IMAGE_MODEL,
         "filename_model": DEFAULT_CHAT_MODEL,
         "filename_base_url": NEWXXT_API_BASE,
-        "filename_api_key": NEWXXT_API_KEY,
+        "filename_api_key": NEWXXT_CHAT_KEY,
     },
     "xmapi": {
         "label": "xmapi 生图 + newxxt 起名",
@@ -233,7 +237,7 @@ RELAY_PRESETS: dict[str, dict[str, str]] = {
         "remix_chat_model": DEFAULT_IMAGE_MODEL,
         "filename_model": DEFAULT_CHAT_MODEL,
         "filename_base_url": NEWXXT_API_BASE,
-        "filename_api_key": NEWXXT_API_KEY,
+        "filename_api_key": NEWXXT_CHAT_KEY,
     },
 }
 
@@ -278,11 +282,15 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
     current_key = str(api.get("api_key") or "").strip()
     broken = {_relay_root(item) for item in OLD_RELAY_URLS}
     baked_xmapi = current_url == _relay_root(XMAP_API_BASE) and current_key in {"", XMAP_API_KEY}
-    if not current_url or current_url in broken or baked_xmapi:
+    baked_old_newxxt = current_url == _relay_root(NEWXXT_API_BASE) and current_key in OLD_NEWXXT_API_KEYS
+    if not current_url or current_url in broken or baked_xmapi or baked_old_newxxt:
         api["base_url"] = NEWXXT_API_BASE
         api["api_key"] = NEWXXT_API_KEY
         current_url = _relay_root(NEWXXT_API_BASE)
         current_key = NEWXXT_API_KEY
+        if not str(api.get("filename_api_key") or "").strip():
+            api["filename_api_key"] = NEWXXT_CHAT_KEY
+            api["filename_base_url"] = NEWXXT_API_BASE
         changed = True
     elif current_url == _relay_root(NEWXXT_API_BASE) and not current_key:
         api["api_key"] = NEWXXT_API_KEY
@@ -304,7 +312,7 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
     if current_url in IMAGE_ONLY_RELAYS and not str(api.get("filename_base_url") or "").strip():
         api["filename_base_url"] = NEWXXT_API_BASE
         if not str(api.get("filename_api_key") or "").strip():
-            api["filename_api_key"] = NEWXXT_API_KEY
+            api["filename_api_key"] = NEWXXT_CHAT_KEY
         changed = True
     if current_url == _relay_root(XMAP_API_BASE):
         if not str(api.get("username") or "").strip():

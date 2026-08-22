@@ -18,6 +18,13 @@ from wallpaper_studio.relay import (
 from tests.helpers import make_png
 
 
+def test_friendly_message_for_chat_group_cannot_generate_images():
+    text = friendly_error_message("Image generation is not enabled for this group")
+    assert "对话组" in text
+    assert "生图" in text
+    assert friendly_error_message(text) == text
+
+
 def test_friendly_message_for_image_generation_tools_error():
     raw = "Tool choice 'image_generation' not found in 'tools' parameter."
     text = friendly_error_message(raw)
@@ -139,6 +146,114 @@ def test_remix_uses_generations_when_that_is_what_the_relay_tests(tmp_path: Path
     assert seen == ["/v1/images/generations"]
 
 
+def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        content_type = request.headers.get("content-type", "")
+        if content_type.startswith("multipart/"):
+            seen.append(f"{request.url.path}:multipart")
+            return httpx.Response(
+                400,
+                json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+            )
+        body = json.loads(request.content)
+        seen.append(request.url.path)
+        if request.url.path.endswith("/v1/chat/completions"):
+            assert any(
+                isinstance(item, dict) and item.get("type") == "image_url"
+                for item in body["messages"][1]["content"]
+            )
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "snowy alpine lake wallpaper, noon light"}}]},
+            )
+        if request.url.path.endswith("/v1/images/generations"):
+            if "image" in body or "images" in body:
+                return httpx.Response(
+                    400,
+                    json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+                )
+            assert body["prompt"] == "snowy alpine lake wallpaper, noon light"
+            assert body.get("quality") == "medium"
+            assert "image" not in body
+            return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+        )
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", filename_model="gpt-5.4-mini", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert dest.read_bytes() == source.read_bytes()
+    assert "/v1/chat/completions" in seen
+    assert seen.count("/v1/images/generations") >= 2
+
+
+def test_remix_falls_back_to_plain_generations_when_vision_fails(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("content-type", "").startswith("multipart/"):
+            return httpx.Response(
+                400,
+                json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+            )
+        body = json.loads(request.content)
+        if request.url.path.endswith("/v1/images/generations") and "image" not in body and "images" not in body:
+            return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+        )
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert dest.read_bytes() == source.read_bytes()
+
+
+def test_remix_falls_back_to_aipix_when_newxxt_tools_path_is_broken(tmp_path: Path, monkeypatch):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    seen: list[str] = []
+    monkeypatch.setattr("wallpaper_studio.relay.wait_or_stop", lambda _seconds: None)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if "aipixapi" in request.url.host and request.url.path.endswith("/v1/images/edits"):
+            if request.headers.get("content-type", "").startswith("multipart/"):
+                return httpx.Response(
+                    400,
+                    json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+                )
+            body = json.loads(request.content)
+            if "images" in body:
+                return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        return httpx.Response(
+            400,
+            json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
+        )
+
+    client = RelayClient(
+        ApiSettings(base_url="https://api.newxxt.top", api_key="sk-newxxt", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert any("aipixapi" in url for url in seen)
+
+
 def test_remix_falls_back_to_multipart_edits(tmp_path: Path):
     source = make_png(tmp_path / "night.png")
     image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
@@ -165,8 +280,9 @@ def test_remix_falls_back_to_multipart_edits(tmp_path: Path):
     assert "/v1/images/edits:multipart" in seen
 
 
-def test_remix_explains_that_panel_text_to_image_is_not_edits(tmp_path: Path):
+def test_remix_explains_that_panel_text_to_image_is_not_edits(tmp_path: Path, monkeypatch):
     source = make_png(tmp_path / "night.png")
+    monkeypatch.setattr("wallpaper_studio.relay.wait_or_stop", lambda _seconds: None)
 
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(

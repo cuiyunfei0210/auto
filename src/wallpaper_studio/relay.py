@@ -9,7 +9,14 @@ import httpx
 
 from wallpaper_studio.control import JobStopped, pop_http, push_http, stop_requested, wait_or_stop
 from wallpaper_studio.files import fit_image_bytes, sanitize_filename, unique_path
-from wallpaper_studio.models import ApiSettings, DEFAULT_API_BASE, effective_remix_prompt
+from wallpaper_studio.models import (
+    AIPIX_API_BASE,
+    AIPIX_API_KEY,
+    ApiSettings,
+    DEFAULT_API_BASE,
+    effective_remix_prompt,
+    title_api_settings,
+)
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 _DATA_URL = re.compile(r"^data:image/([^;]+);base64,(.+)$", re.DOTALL | re.IGNORECASE)
@@ -31,6 +38,12 @@ def friendly_error_message(raw: str) -> str:
             "生图请用 gpt-image-2；写标题请用 gpt-5.4-mini，接口用 https://api.newxxt.top（不要带 /v1）。"
             "aipixapi 这组 Key 只有 gpt-image-2，不能起名。"
         )
+    if "image generation is not enabled" in lowered:
+        return (
+            "当前这组 Key 是对话组，不能生图。"
+            "「生图 API Key」请填中转站里名称带「生图」的那把，"
+            "「对话 API Key」请填名称带「对话」的那把。"
+        )
     if "image_generation" in lowered and "tools" in lowered:
         return (
             "中转站后台「测试账号」走的是 /v1/images/generations（文生图，不带原图），"
@@ -38,8 +51,9 @@ def friendly_error_message(raw: str) -> str:
             "壁纸工坊二创要按原图改图，会打 /v1/images/edits；"
             "这条改图通道仍在报 Tool choice 'image_generation' not found in 'tools'。"
             "请让中转站给 gpt-image-2 打开「改图 / images/edits」。"
-            "程序也会同时试带原图的 /v1/images/generations。"
-            "还不行就暂时改用「跳过二创」。"
+            "程序会先识图，再走带 quality 的文生图，并自动重试。"
+            "这个站的文生图线路会抖动，后台刚测通小狗，程序这边有时仍会被转进坏掉的 tools 通道。"
+            "请再跑一次；还不行就暂时改用「跳过二创」。"
         )
     if "xmapi.site" in lowered and ("生图" in text or "images" in lowered or "线路" in text):
         return (
@@ -126,6 +140,11 @@ def chat_model_supports_titles(model: str) -> bool:
         return False
     markers = ("image", "dall-e", "dalle", "flux", "midjourney", "stable-diffusion", "sdxl")
     return not any(token in name for token in markers)
+
+
+def _is_tools_choice_error(text: str) -> bool:
+    lowered = (text or "").lower()
+    return "image_generation" in lowered and "tools" in lowered
 
 
 def is_transient_relay_error(text: str) -> bool:
@@ -314,6 +333,7 @@ class RelayClient:
         payload: dict,
         timeout: float | None = None,
         retries: int = 0,
+        retry_tools_error: bool = False,
     ) -> dict:
         kwargs: dict = {"timeout": self.timeout if timeout is None else timeout}
         if self.transport is not None:
@@ -343,7 +363,10 @@ class RelayClient:
                 last_error = ApiError(f"中转站网络超时或中断：{exc}")
             except ApiError as exc:
                 last_error = exc
-                if not is_transient_relay_error(str(exc)):
+                retryable = is_transient_relay_error(str(exc))
+                if retry_tools_error and _is_tools_choice_error(str(exc)):
+                    retryable = True
+                if not retryable:
                     raise
             except Exception as exc:
                 if stop_requested():
@@ -457,7 +480,14 @@ class RelayClient:
             raise ApiError("文件名接口返回格式无法解析。") from exc
         return sanitize_filename(str(text), fallback=original_stem)
 
-    def remix_image(self, source: Path, dest_dir: Path, title: str) -> Path:
+    def remix_image(
+        self,
+        source: Path,
+        dest_dir: Path,
+        title: str,
+        *,
+        allow_fallback: bool = True,
+    ) -> Path:
         mime = mimetypes.guess_type(source.name)[0] or "image/png"
         raw = source.read_bytes()
         encoded = base64.b64encode(raw).decode("ascii")
@@ -498,8 +528,58 @@ class RelayClient:
             except ApiError as exc:
                 errors.append(f"{path}(multipart): {exc}")
 
+        # newxxt's working admin test is clean /v1/images/generations.
+        # Extra image fields on that path are rewritten to the broken edits/tools
+        # channel, so describe the source first, then generate without image fields.
+        described = ""
+        try:
+            described = self._describe_source_for_generation(source)
+        except ApiError as exc:
+            errors.append(f"/v1/chat/completions(识图): {exc}")
+        for label, generation_prompt in (
+            ("/v1/images/generations(识图文生图)", described),
+            ("/v1/images/generations(文生图)", prompt),
+        ):
+            if not generation_prompt.strip():
+                continue
+            try:
+                data = self._post_json(
+                    "/v1/images/generations",
+                    {
+                        "model": image_model,
+                        "prompt": generation_prompt,
+                        "size": size,
+                        "quality": "medium",
+                    },
+                    retries=1,
+                    retry_tools_error=True,
+                )
+                image_bytes, suffix = extract_image_payload(data, source.suffix)
+                return _save(image_bytes, suffix)
+            except ApiError as exc:
+                errors.append(f"{label}: {exc}")
+
+        if allow_fallback:
+            fallback = self._fallback_image_client()
+            if fallback is not None:
+                try:
+                    return fallback.remix_image(source, dest_dir, title, allow_fallback=False)
+                except ApiError as exc:
+                    errors.append(f"备用生图 aipixapi: {exc}")
+
         combined = " | ".join(errors) if errors else "未知错误"
         raise ApiError(friendly_error_message(combined))
+
+    def _fallback_image_client(self) -> RelayClient | None:
+        if normalize_api_base(self.settings.base_url) == normalize_api_base(AIPIX_API_BASE):
+            return None
+        return RelayClient(
+            self.settings.model_copy(
+                update={"base_url": AIPIX_API_BASE, "api_key": AIPIX_API_KEY}
+            ),
+            timeout=self.timeout,
+            transport=self.transport,
+        )
 
     def _remix_requests(self, data_url: str, mime: str) -> list[tuple[str, dict]]:
         prompt = build_remix_prompt(self.settings.remix_prompt)
@@ -510,7 +590,7 @@ class RelayClient:
             "model": image_model,
             "prompt": prompt,
             "size": size,
-            "n": 1,
+            "quality": "medium",
         }
         generations = (
             "/v1/images/generations",
@@ -590,6 +670,74 @@ class RelayClient:
             ),
             *image_attempts,
         ]
+
+    def _describe_source_for_generation(self, source: Path) -> str:
+        model = self.resolve_title_model() or "gpt-5.4-mini"
+        if not chat_model_supports_titles(model):
+            model = "gpt-5.4-mini"
+        instruction = effective_remix_prompt(self.settings.remix_prompt)
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You write image-generation prompts. Return only the prompt text. "
+                        "No quotes, no markdown, no explanation."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Look at this wallpaper photo. Write one detailed English "
+                                "image-generation prompt for a brand-new wallpaper. "
+                                "Keep the same subject, but follow these restyle instructions:\n"
+                                f"{instruction}"
+                            ),
+                        },
+                        {"type": "image_url", "image_url": {"url": _vision_data_url(source)}},
+                    ],
+                },
+            ],
+            "max_tokens": 400,
+        }
+        last_error: ApiError | None = None
+        for client in self._vision_clients():
+            try:
+                data = client._post_json("/v1/chat/completions", payload, timeout=40.0)
+                text = str(data["choices"][0]["message"]["content"]).strip()
+            except (ApiError, KeyError, IndexError, TypeError) as exc:
+                last_error = exc if isinstance(exc, ApiError) else ApiError("识图接口返回格式无法解析。")
+                continue
+            text = text.strip(" \"'`")
+            if text:
+                return text
+            last_error = ApiError("识图接口没有返回提示词。")
+        raise last_error or ApiError("识图失败。")
+
+    def _vision_clients(self) -> list["RelayClient"]:
+        clients = [self]
+        title = title_api_settings(self.settings)
+        if title is not self.settings:
+            clients.insert(0, RelayClient(title, timeout=self.timeout, transport=self.transport))
+        return clients
+
+
+def _vision_data_url(source: Path) -> str:
+    from io import BytesIO
+
+    from PIL import Image
+
+    with Image.open(source) as image:
+        rgb = image.convert("RGB")
+        rgb.thumbnail((768, 768))
+        buffer = BytesIO()
+        rgb.save(buffer, format="JPEG", quality=80)
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
 
 
 def _json_or_error(response: httpx.Response) -> dict:

@@ -65,6 +65,7 @@ def prepare_images(
         if removed:
             emit(f"已清空输出目录里上次留下的 {removed} 张图，本轮二创数量会和源图一致。")
         emit("二创会按你填的提示词改图，不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
+        emit("若中转站改图通道不通，会先识图再走文生图；还不行会改走 aipixapi 生图。")
         api_size, target = resolve_remix_size(config.api.image_size)
         if target:
             emit(

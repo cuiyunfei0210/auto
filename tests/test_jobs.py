@@ -152,11 +152,27 @@ def test_apply_defaults_keeps_custom_newxxt_key_and_fixes_accounts():
     assert all(item.username != "1252597792@qq.com" for item in updated.accounts)
 
 
+def test_apply_defaults_migrates_old_newxxt_key_and_adds_chat_key():
+    from wallpaper_studio.models import NEWXXT_API_KEY, NEWXXT_CHAT_KEY
+
+    config = AppConfig.model_validate(
+        {
+            "api": {
+                "base_url": "https://api.newxxt.top",
+                "api_key": "sk-beef6174c1f75a4eec5a5890a1f4ed02a3d4824ec72962cb51960d66d577c927",
+            }
+        }
+    )
+    updated = apply_builtin_defaults(config)
+    assert updated.api.api_key == NEWXXT_API_KEY
+    assert updated.api.filename_api_key == NEWXXT_CHAT_KEY
+
+
 def test_apply_defaults_switches_xbhuiz_to_newxxt():
     config = AppConfig.model_validate({"api": {"base_url": "https://xbhuiz.com", "api_key": ""}})
     updated = apply_builtin_defaults(config)
     assert updated.api.base_url == "https://api.newxxt.top"
-    assert updated.api.api_key.startswith("sk-beef")
+    assert updated.api.api_key.startswith("sk-")
 
 
 def test_apply_defaults_migrates_baked_xmapi_to_newxxt():
@@ -165,7 +181,7 @@ def test_apply_defaults_migrates_baked_xmapi_to_newxxt():
     config = AppConfig.model_validate({"api": {"base_url": "https://xmapi.site", "api_key": XMAP_API_KEY}})
     updated = apply_builtin_defaults(config)
     assert updated.api.base_url == "https://api.newxxt.top"
-    assert updated.api.api_key.startswith("sk-beef")
+    assert updated.api.api_key.startswith("sk-")
 
 
 def test_apply_defaults_keeps_custom_xmapi_and_adds_newxxt_titles():

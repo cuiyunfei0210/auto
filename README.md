@@ -96,7 +96,7 @@ python run.py
 
 `https://www.aipixapi.art` 这组 Key 只有 `gpt-image-2`，适合生图；写标题会改走 newxxt。`xmapi.site` 同样是生图为主。
 
-`gpt-image-2` 会先走中转站后台常测的 `/v1/images/generations`（带原图），不通再试 `/v1/images/edits`。中转站点「测试」出小狗照片，只能说明文生图通了，不能说明按原图改图通了。
+`gpt-image-2` 会先试按原图改图。newxxt 的 `/v1/images/edits` 会报 `image_generation` tools 错，后台测小狗只证明文生图通了，而且这条文生图有时也会被转进坏通道。改图失败后会先识图再走带 `quality` 的文生图；还不行会改走 aipixapi 生图，标题仍用 newxxt 对话 Key。newxxt 请把「生图」Key 填进生图栏，「对话」Key 填进对话栏。
 
 `gpt-image-2` 只能原生出 `1024x1024` / `1536x1024` / `1024x1536`。出图尺寸填 `1920x1080`、`2K`、`4K` 时，会先按最接近的原生尺寸出图，再放大到你填的宽高。CQwall 最少要 1920×1080，推荐填 `1920x1080`。
 
