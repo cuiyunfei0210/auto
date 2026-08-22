@@ -282,7 +282,11 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
     current_key = str(api.get("api_key") or "").strip()
     broken = {_relay_root(item) for item in OLD_RELAY_URLS}
     baked_xmapi = current_url == _relay_root(XMAP_API_BASE) and current_key in {"", XMAP_API_KEY}
-    baked_old_newxxt = current_url == _relay_root(NEWXXT_API_BASE) and current_key in OLD_NEWXXT_API_KEYS
+    baked_old_newxxt = current_key in OLD_NEWXXT_API_KEYS
+    if current_url != _relay_root(NEWXXT_API_BASE):
+        api["base_url"] = NEWXXT_API_BASE
+        current_url = _relay_root(NEWXXT_API_BASE)
+        changed = True
     if not current_url or current_url in broken or baked_xmapi or baked_old_newxxt:
         api["base_url"] = NEWXXT_API_BASE
         api["api_key"] = NEWXXT_API_KEY

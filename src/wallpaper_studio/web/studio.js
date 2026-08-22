@@ -13,13 +13,10 @@ const siteFields = [
   "category_selector", "category_value", "agree_selector", "submit_selector", "success_text",
 ];
 
+const FIXED_API_BASE = "https://api.newxxt.top";
 const apiFields = [
-  "base_url", "api_key", "remix_chat_model", "remix_model", "filename_model",
+  "api_key", "remix_chat_model", "remix_model", "filename_model",
   "filename_base_url", "filename_api_key", "remix_prompt", "filename_prompt", "image_size",
-];
-const relayPresetFields = [
-  "base_url", "api_key", "remix_chat_model", "remix_model", "filename_model",
-  "filename_base_url", "filename_api_key",
 ];
 
 function $(id) { return document.getElementById(id); }
@@ -59,6 +56,7 @@ function collectConfig() {
 
   const api = {};
   for (const key of apiFields) api[key] = $(key).value;
+  api.base_url = FIXED_API_BASE;
   api.username = $("api_username") ? $("api_username").value.trim() : "";
   api.password = $("api_password") ? $("api_password").value : "";
 
@@ -88,9 +86,6 @@ function applyConfig(config) {
   $("headless").checked = Boolean(config.site.headless);
   if ($("site_preset")) {
     $("site_preset").value = (config.site.login_url || "").includes("cqwall.com") ? "cqwall" : "demo";
-  }
-  if ($("relay_preset")) {
-    $("relay_preset").value = matchRelayPreset(config.api);
   }
   for (const key of apiFields) $(key).value = config.api[key] == null ? "" : config.api[key];
   if ($("api_username")) $("api_username").value = config.api.username || "";
@@ -153,9 +148,6 @@ function localStartProblems(cfg) {
     );
   }
   if (cfg.mode === "remix_then_upload") {
-    if (!(cfg.api.base_url || "").trim()) {
-      problems.push("二创模式需要填写中转站接口地址，例如 https://api.newxxt.top。");
-    }
     if (!(cfg.api.api_key || "").trim() && !((cfg.api.username || "").trim() && cfg.api.password)) {
       problems.push("二创模式需要 API Key，或中转站邮箱和密码。请到「二创 API」填写。");
     }
@@ -192,15 +184,7 @@ async function parseJson(res) {
 
 let lastState = {};
 let presets = {};
-let relayPresets = {};
 let jobStopping = false;
-
-function matchRelayPreset(api) {
-  const url = String((api && api.base_url) || "").toLowerCase();
-  if (url.indexOf("aipixapi") >= 0) return "aipixapi";
-  if (url.indexOf("xmapi") >= 0) return "xmapi";
-  return "newxxt";
-}
 
 function applySourceStatus(data) {
   lastState = data || {};
@@ -247,7 +231,6 @@ async function refresh() {
     throw new Error(data.error || `服务器出错（${res.status}）`);
   }
   presets = data.presets || presets;
-  relayPresets = data.relay_presets || relayPresets;
   if (data.config && data.config.mode) applyConfig(data.config);
   applySourceStatus(data);
   const banner = $("env-banner");
@@ -406,17 +389,6 @@ if ($("site_preset")) {
     if (!preset) return;
     for (const key of siteFields) $(key).value = preset[key] == null ? "" : preset[key];
     $("headless").checked = Boolean(preset.headless);
-  };
-}
-if ($("relay_preset")) {
-  $("relay_preset").onchange = () => {
-    const preset = relayPresets[$("relay_preset").value];
-    if (!preset) return;
-    for (const key of relayPresetFields) {
-      if ($(key)) $(key).value = preset[key] == null ? "" : preset[key];
-    }
-    if ($("api_username")) $("api_username").value = preset.username || "";
-    if ($("api_password")) $("api_password").value = preset.password || "";
   };
 }
 } catch (err) {

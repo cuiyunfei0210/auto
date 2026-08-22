@@ -150,6 +150,7 @@ def load_config() -> AppConfig:
 
 
 def save_config(config: AppConfig) -> None:
+    config = apply_builtin_defaults(config)
     path = config_path()
     path.write_text(config.model_dump_json(indent=2), encoding="utf-8")
 

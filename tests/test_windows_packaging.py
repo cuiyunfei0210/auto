@@ -42,15 +42,15 @@ def test_windows_packaging_files_exist():
     assert "remix_progress" in ui
     assert "/api/shutdown" in ui
     assert "btn-quit" in ui
-    assert "relay_preset" in ui
+    assert "FIXED_API_BASE" in ui
     assert "filename_base_url" in ui
+    assert "relay_preset" not in ui
     html = (root / "src" / "wallpaper_studio" / "web" / "index.html").read_text(encoding="utf-8")
     assert "待二创" in html
     assert "退出程序" in html
-    assert "relay_preset" in html
-    assert "aipixapi" in html
+    assert "relay_preset" not in html
+    assert "api.newxxt.top" in html
     assert "1920x1080" in html
-    assert "再放大" in html
     assert "??" not in ui
     assert "replaceAll" not in ui
     assert "studio.js" in html

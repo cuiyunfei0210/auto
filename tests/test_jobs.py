@@ -189,9 +189,8 @@ def test_apply_defaults_keeps_custom_xmapi_and_adds_newxxt_titles():
         {"api": {"base_url": "https://xmapi.site", "api_key": "sk-custom-xmapi"}}
     )
     updated = apply_builtin_defaults(config)
-    assert updated.api.base_url == "https://xmapi.site"
+    assert updated.api.base_url == "https://api.newxxt.top"
     assert updated.api.api_key == "sk-custom-xmapi"
-    assert updated.api.filename_base_url == "https://api.newxxt.top"
     assert updated.api.filename_model == "gpt-5.4-mini"
 
 

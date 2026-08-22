@@ -11,7 +11,7 @@ from wallpaper_studio.files import (
     sanitize_filename,
 )
 from wallpaper_studio.models import AppConfig, PreparedImage, title_api_settings
-from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message, resolve_remix_size
+from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
@@ -65,16 +65,6 @@ def prepare_images(
         if removed:
             emit(f"已清空输出目录里上次留下的 {removed} 张图，本轮二创数量会和源图一致。")
         emit("二创会按你填的提示词改图，不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
-        emit("若中转站改图通道不通，会先识图再走文生图；还不行会改走 aipixapi 生图。")
-        api_size, target = resolve_remix_size(config.api.image_size)
-        if target:
-            emit(
-                f"gpt-image-2 原生只能出 1024×1024 / 1536×1024 / 1024×1536，"
-                f"本轮先按 {api_size} 出图，再放大到 {target[0]}×{target[1]}。"
-                "CQwall 最少要 1920×1080，出图尺寸填多少，保存就是多大。"
-            )
-        else:
-            emit(f"本轮按 {api_size} 出图，与填写尺寸一致。")
 
     def cancelled() -> bool:
         if stop_check and stop_check():

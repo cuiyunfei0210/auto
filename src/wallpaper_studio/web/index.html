@@ -166,31 +166,23 @@
       <section class="pane hidden" id="pane-api">
         <article class="card">
           <h2>中转站 API</h2>
-          <label>中转站模板
-            <select id="relay_preset">
-              <option value="newxxt">newxxt（生图 + 起名）</option>
-              <option value="aipixapi">aipixapi 生图 + newxxt 起名</option>
-              <option value="xmapi">xmapi 生图 + newxxt 起名</option>
-            </select>
-          </label>
-          <label>接口地址（不要带 /v1）<input id="base_url" placeholder="https://api.newxxt.top"></label>
-          <label>中转站邮箱（仅 xmapi 自动取 Key 时需要）<input id="api_username"></label>
+          <label>中转站邮箱<input id="api_username"></label>
           <label>中转站密码<input id="api_password" type="password"></label>
-          <label>生图 API Key（中转站里名称带「生图」的那把）<input id="api_key" type="password" placeholder="sk-…"></label>
+          <label>生图 API Key<input id="api_key" type="password" placeholder="sk-…"></label>
           <label>二创对话模型（生图请保持 gpt-image-2，不要填 gpt-5.x）<input id="remix_chat_model"></label>
           <label>生图模型<input id="remix_model" list="remix-model-options" placeholder="gpt-image-2"></label>
           <datalist id="remix-model-options">
             <option value="gpt-image-2">gpt-image-2</option>
             <option value="gpt-image-1.5">gpt-image-1.5</option>
           </datalist>
-          <label>文件名模型（对话/识图，newxxt 用 gpt-5.4-mini）<input id="filename_model" list="filename-model-options" placeholder="gpt-5.4-mini"></label>
+          <label>文件名模型（对话/识图）<input id="filename_model" list="filename-model-options" placeholder="gpt-5.4-mini"></label>
           <datalist id="filename-model-options">
             <option value="gpt-5.4-mini">gpt-5.4-mini</option>
             <option value="gpt-5.4">gpt-5.4</option>
             <option value="gpt-5.2">gpt-5.2</option>
           </datalist>
-          <label>写标题接口（可留空，默认跟上面同一个站）<input id="filename_base_url" placeholder="https://api.newxxt.top"></label>
-          <label>对话 API Key（写标题/识图，名称带「对话」的那把）<input id="filename_api_key" type="password" placeholder="跟生图不是同一组 Key 时再填"></label>
+          <label>写标题接口（可留空）<input id="filename_base_url" placeholder="https://api.newxxt.top"></label>
+          <label>对话 API Key<input id="filename_api_key" type="password" placeholder="跟生图不是同一组 Key 时再填"></label>
           <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="留空会用默认改图提示。想避免黄昏，请写清时段，例如正午、阴天、夜晚、冷色调"></textarea></label>
           <label>文件名提示词（根据图片生成上传标题）<textarea id="filename_prompt" rows="3" placeholder="Write a short English wallpaper title, max 18 characters"></textarea></label>
           <label>出图尺寸<input id="image_size" list="image-size-options" placeholder="1920x1080"></label>
@@ -203,11 +195,10 @@
             <option value="1024x1536">模型原生竖图 1024×1536</option>
             <option value="1024x1024">方图 1024×1024</option>
           </datalist>
-          <p class="hint">newxxt 要填两把 Key：生图那把给二创，对话那把给写标题和识图。后台「测试账号」出小狗，测的是不带原图的 /v1/images/generations；带原图的 /v1/images/edits 在这个站会报 tools 错，文生图有时也会被转进这条坏通道。程序会先试改图，失败就识图再走文生图，还不行自动改走 aipixapi 生图（标题仍用对话 Key）。中转站邮箱不要填进 CQwall 账号队列。OpenCode 配置里的 gpt-5.x 是对话模型，不能直接当生图模型。二创请走 gpt-image-2。aipixapi / xmapi 写标题会自动改走 newxxt。gpt-image-2 原生只能出 1024×1024 / 1536×1024 / 1024×1536；出图尺寸填 1920×1080、2K、4K 时，会先按最接近的原生尺寸出图，再放大到你填的宽高（CQwall 最少 1920×1080）。二创提示词以你填的为准；电影级光影、atmospheric depth 很容易出黄昏，想要别的时段请写正午、阴天、夜晚或冷色。标题语言以「文件名提示词」为准，要英文就写 English title；程序不再强制中文。</p>
         </article>
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260822b" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260822c" charset="utf-8"></script>
 </body>
 </html>
