@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>壁纸工坊 · Wallpaper Studio</title>
+  <link rel="icon" href="/static/favicon.svg"/>
+  <link rel="stylesheet" href="/static/studio.css"/>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <span class="mark"></span>
+        <div>
+          <strong>壁纸工坊</strong>
+          <small>二创 · 顺序上传</small>
+        </div>
+      </div>
+      <nav>
+        <button data-pane="job" class="active">任务</button>
+        <button data-pane="folders">文件夹</button>
+        <button data-pane="accounts">账号</button>
+        <button data-pane="site">网页上传</button>
+        <button data-pane="api">二创 API</button>
+      </nav>
+      <p class="aside-note">一次只开一个窗口。一个账号传完，再登录下一个。</p>
+    </aside>
+    <main>
+      <header class="top">
+        <div>
+          <h1 id="heading">任务</h1>
+          <p id="subheading">先准备图片，再按账号队列模拟网页上传。</p>
+        </div>
+        <div class="status-pill" id="status-pill">空闲</div>
+      </header>
+
+      <p class="banner" id="env-banner" hidden></p>
+
+      <section class="pane" id="pane-job">
+        <div class="grid two">
+          <article class="card">
+            <h2>本轮怎么跑</h2>
+            <label class="choice">
+              <input type="radio" name="mode" value="upload_only" checked>
+              <span>跳过二创，直接上传源文件夹</span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="mode" value="remix_then_upload">
+              <span>先调用中转站二创，再上传结果文件夹</span>
+            </label>
+            <div class="stats">
+              <div><em id="source-count">0</em><span>源图</span></div>
+              <div><em id="remix-count">0</em><span>待二创</span></div>
+              <div><em id="account-count">0</em><span>账号</span></div>
+            </div>
+            <div class="actions">
+              <button type="button" class="primary" id="btn-start">开始任务</button>
+              <button type="button" class="ghost" id="btn-stop">停止</button>
+              <button type="button" class="ghost" id="btn-save">保存设置</button>
+              <button type="button" class="ghost" id="btn-quit">退出程序</button>
+            </div>
+            <p class="hint" id="path-hint"></p>
+            <p class="hint" id="count-hint"></p>
+            <p class="hint error" id="source-hint" hidden></p>
+            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。gpt-image-2 生图大约要几十秒，请看右侧日志。「待二创」是还没二创完的源图张数，每完成一张减 1。点「停止」会立刻出现在日志里；如果当前这张图正在请求中转站，会等这次请求结束再停，不会再做下一张。关窗口或点「退出程序」即可退出。</p>
+          </article>
+          <article class="card log-card">
+            <h2>运行日志</h2>
+            <pre id="log" class="log"></pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="pane hidden" id="pane-folders">
+        <article class="card">
+          <h2>图片目录</h2>
+          <label>源文件夹（原图）<input id="source_dir" placeholder="例如 D:\wallpapers\source"></label>
+          <label>输出文件夹（二创结果 / 待上传）<input id="output_dir" placeholder="例如 D:\wallpapers\output"></label>
+          <p class="hint" id="folder-resolved"></p>
+          <p class="hint">留空则读取程序旁边的 data\source。请把 png/jpg/webp 放进「实际读取」的那个目录。同名同大小的图只二创一次，源目录里的「二创」子文件夹会跳过。跳过二创时直接上传源文件夹，不会再拷进输出目录。开始二创前会清空输出目录里的旧图，所以本轮二创张数会和源图一致。</p>
+        </article>
+      </section>
+
+      <section class="pane hidden" id="pane-accounts">
+        <article class="card">
+          <div class="row-between">
+            <h2>账号队列</h2>
+            <button class="ghost" id="btn-add-account">添加账号</button>
+          </div>
+          <p class="hint">按列表顺序登录。CQwall 用邮箱当账号。当前账号的数量用完后，自动退出并登录下一个。每个账号应走不同出口，避免多个账号落在同一个 IP。</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>账号</th>
+                  <th>密码</th>
+                  <th>上传数量</th>
+                  <th>间隔秒</th>
+                  <th>该账号代理</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="account-rows"></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="card">
+          <h2>出口 IP</h2>
+          <p class="hint">目的是让每个账号使用不同的网络出口。不启用时代码仍可上传，但本机多个账号会表现为同一个 IP。</p>
+          <label class="choice">
+            <input type="checkbox" id="proxy_enabled">
+            <span>启用代理，按账号切换出口</span>
+          </label>
+          <label class="choice">
+            <input type="checkbox" id="unique_ip_per_account" checked>
+            <span>禁止多个账号共用同一个代理（推荐）</span>
+          </label>
+          <label>代理池，一行一个。账号行里没填代理时，按顺序一对一分配
+            <textarea id="proxies" rows="5" placeholder="http://user:pass@1.2.3.4:8080&#10;socks5://2.2.2.2:1080"></textarea>
+          </label>
+          <label class="advanced">允许共用时，每几个账号换一次（仅在取消上方「禁止共用」后生效）
+            <input id="rotate_every_accounts" type="number" min="1" value="1">
+          </label>
+          <p class="hint" id="proxy-hint"></p>
+        </article>
+      </section>
+
+      <section class="pane hidden" id="pane-site">
+        <article class="card">
+          <h2>模拟网页上传</h2>
+          <p class="hint">默认已对接 CQwall：首页邮箱登录弹层 → 创作中心上传。不限制图片宽高。账号页默认已填一个 CQwall 邮箱。</p>
+          <label>站点模板
+            <select id="site_preset">
+              <option value="cqwall">CQwall（www.cqwall.com）</option>
+              <option value="demo">本机示例站</option>
+            </select>
+          </label>
+          <div class="grid two">
+            <label>登录页 URL<input id="login_url"></label>
+            <label>上传页 URL<input id="upload_url"></label>
+            <label>打开登录弹层选择器<input id="open_login_selector"></label>
+            <label>账号输入框选择器<input id="username_selector"></label>
+            <label>密码输入框选择器<input id="password_selector"></label>
+            <label>登录按钮选择器<input id="login_button_selector"></label>
+            <label>登录成功文字<input id="login_success_text"></label>
+            <label>已登录标记选择器<input id="logged_in_selector"></label>
+            <label>打开上传弹层选择器<input id="open_upload_selector"></label>
+            <label>文件选择框选择器<input id="file_input_selector"></label>
+            <label>文件上传完成文字<input id="file_uploaded_text"></label>
+            <label>标题输入框选择器<input id="title_selector"></label>
+            <label>分类选择器<input id="category_selector"></label>
+            <label>默认分类（风景=9，也可填中文名）<input id="category_value"></label>
+            <label>协议勾选选择器<input id="agree_selector"></label>
+            <label>发布按钮选择器<input id="submit_selector"></label>
+            <label>成功提示文字<input id="success_text"></label>
+            <label class="choice">
+              <input type="checkbox" id="headless">
+              <span>后台运行浏览器（不弹出窗口）</span>
+            </label>
+          </div>
+          <p class="hint">本机示例站：<a href="/demo/login" target="_blank">/demo/login</a>。CQwall 分类（填数字或中文）：1 动物 / 2 军事 / 3 汽车 / 4 电影 / 5 时代 / 6 明星 / 7 宇宙 / 8 美女 / 9 风景 / 10 动漫 / 17 游戏 / 18 都市。</p>
+        </article>
+      </section>
+
+      <section class="pane hidden" id="pane-api">
+        <article class="card">
+          <h2>中转站 API</h2>
+          <label>中转站邮箱<input id="api_username"></label>
+          <label>中转站密码<input id="api_password" type="password"></label>
+          <label>生图 API Key<input id="api_key" type="password" placeholder="sk-…"></label>
+          <label>二创对话模型（生图请保持 gpt-image-2，不要填 gpt-5.x）<input id="remix_chat_model"></label>
+          <label>生图模型<input id="remix_model" list="remix-model-options" placeholder="gpt-image-2"></label>
+          <datalist id="remix-model-options">
+            <option value="gpt-image-2">gpt-image-2</option>
+            <option value="gpt-image-1.5">gpt-image-1.5</option>
+          </datalist>
+          <label>文件名模型（对话/识图）<input id="filename_model" list="filename-model-options" placeholder="gpt-5.4-mini"></label>
+          <datalist id="filename-model-options">
+            <option value="gpt-5.4-mini">gpt-5.4-mini</option>
+            <option value="gpt-5.4">gpt-5.4</option>
+            <option value="gpt-5.2">gpt-5.2</option>
+          </datalist>
+          <label>写标题接口（可留空）<input id="filename_base_url" placeholder="https://api.newxxt.top"></label>
+          <label>对话 API Key<input id="filename_api_key" type="password" placeholder="跟生图不是同一组 Key 时再填"></label>
+          <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="留空会用默认改图提示。想避免黄昏，请写清时段，例如正午、阴天、夜晚、冷色调"></textarea></label>
+          <label>文件名提示词（根据图片生成上传标题）<textarea id="filename_prompt" rows="3" placeholder="Write a short English wallpaper title, max 18 characters"></textarea></label>
+          <label>出图尺寸<input id="image_size" list="image-size-options" placeholder="1920x1080"></label>
+          <datalist id="image-size-options">
+            <option value="1920x1080">横图 1920×1080（推荐，CQwall 最小）</option>
+            <option value="2560x1440">横图 2560×1440（2K）</option>
+            <option value="3840x2160">横图 3840×2160（4K）</option>
+            <option value="1080x1920">竖图 1080×1920</option>
+            <option value="1536x1024">模型原生横图 1536×1024</option>
+            <option value="1024x1536">模型原生竖图 1024×1536</option>
+            <option value="1024x1024">方图 1024×1024</option>
+          </datalist>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/static/studio.js?v=20260822c" charset="utf-8"></script>
+</body>
+</html>
