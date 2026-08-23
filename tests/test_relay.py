@@ -117,7 +117,8 @@ def test_remix_image_model_uses_clean_edits_endpoint(tmp_path: Path):
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
     assert dest.read_bytes() == source.read_bytes()
-    assert seen[0].endswith("/v1/images/edits")
+    image_paths = [item for item in seen if "/v1/images/" in item]
+    assert image_paths[0].endswith("/v1/images/edits")
     assert seen.count("/v1/images/generations") == 0
 
 
@@ -146,7 +147,8 @@ def test_remix_does_not_treat_panel_generations_as_image_edit(tmp_path: Path):
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
-    assert seen[0].endswith("/v1/images/edits")
+    image_paths = [item for item in seen if "/v1/images/" in item]
+    assert image_paths[0].endswith("/v1/images/edits")
     assert "/v1/images/generations" not in seen
 
 
@@ -171,11 +173,18 @@ def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
                 for item in body["messages"][1]["content"]
             )
             vision_text = body["messages"][1]["content"][0]["text"]
-            assert "soldiers" in vision_text
-            assert "landscape wallpaper" in vision_text
+            assert "军事" in vision_text or "Soldiers" in vision_text or "soldiers" in vision_text
             return httpx.Response(
                 200,
-                json={"choices": [{"message": {"content": "modern soldier in tactical gear with a rifle"}}]},
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "CATEGORY: 军事\nSUBJECT: modern soldier in tactical gear with a rifle"
+                            }
+                        }
+                    ]
+                },
             )
         if request.url.path.endswith("/v1/images/generations"):
             if "image" in body or "images" in body:
@@ -184,8 +193,8 @@ def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
                     json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
                 )
             assert "modern soldier in tactical gear" in body["prompt"]
-            assert "Keep every main subject" in body["prompt"]
-            assert "stay military" in body["prompt"]
+            assert "User remix prompt (must follow)" in body["prompt"]
+            assert "军事" in body["prompt"]
             assert body.get("quality") == "medium"
             assert "image" not in body
             return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
@@ -372,7 +381,7 @@ def test_remix_chat_model_tries_responses_first(tmp_path: Path):
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
-    assert seen[0].endswith("/v1/responses")
+    assert "/v1/responses" in seen
 
 
 def test_remix_falls_back_to_chat_if_responses_has_no_image(tmp_path: Path):
@@ -451,9 +460,10 @@ def test_empty_remix_prompt_sends_strong_restyle_instruction():
     client = RelayClient(settings)
     path, payload = client._remix_requests("data:image/png;base64,xx", "image/png")[0]
     assert path == "/v1/images/edits"
-    assert payload["prompt"].startswith("Primary instruction:")
+    assert payload["prompt"].startswith("Primary instruction")
+    assert "user remix prompt, must follow" in payload["prompt"]
     assert "禁止原样" in payload["prompt"]
-    assert "Military stays military" in payload["prompt"]
+    assert "Keep the source photo's CQwall category" in payload["prompt"]
     assert "Never turn people or military" in payload["prompt"]
     assert "Do not default to sunset" in payload["prompt"]
     assert "Restyle this image as a desktop wallpaper." not in payload["prompt"]
@@ -463,9 +473,21 @@ def test_empty_remix_prompt_sends_strong_restyle_instruction():
 def test_custom_remix_prompt_is_primary_and_does_not_force_sunset():
     prompt = build_remix_prompt("把山改成雪景，正午冷色调，不要黄昏。")
     assert "把山改成雪景" in prompt
-    assert prompt.startswith("Primary instruction:")
+    assert prompt.startswith("Primary instruction")
+    assert "user remix prompt, must follow" in prompt
     assert "Do not default to sunset" in prompt
     assert "Never turn people or military" in prompt
+
+
+def test_user_copy_prompt_is_kept_and_category_is_locked():
+    prompt = build_remix_prompt(
+        "参考这张图，直接把原图做出来。Refer to this image and directly create the original image.",
+        category="军事",
+    )
+    assert "直接把原图做出来" in prompt
+    assert "directly create the original image" in prompt
+    assert "Source category is 军事" in prompt
+    assert "must follow" in prompt
 
 
 def test_sunset_prompt_skips_anti_dusk_guard():
@@ -491,6 +513,8 @@ def test_remix_upscales_when_user_asks_2k(tmp_path: Path):
     image_b64 = base64.b64encode(native.read_bytes()).decode("ascii")
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/v1/chat/completions"):
+            return httpx.Response(400, json={"error": {"message": "nope"}})
         body = json.loads(request.content)
         assert body["size"] == "1536x1024"
         return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})

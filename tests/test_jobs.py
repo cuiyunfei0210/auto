@@ -71,6 +71,28 @@ async def test_job_uploads_one_account_then_switches(studio_home):
     assert waits == [0.01]
 
 
+async def test_upload_uses_detected_source_category(tmp_path: Path):
+    from wallpaper_studio.models import AccountBatch, PreparedImage
+    from wallpaper_studio.uploader import upload_batches
+
+    image = make_png(tmp_path / "soldier.png")
+    uploader = RecordingUploader()
+    batches = [
+        AccountBatch(
+            account=Account(username="demo1", password="123123", upload_count=1, interval_seconds=0),
+            images=[PreparedImage(path=image, title="soldier", category="军事")],
+        )
+    ]
+    uploaded, skipped = await upload_batches(
+        batches,
+        SiteProfile(category_value="风景"),
+        uploader=uploader,
+    )
+    assert uploaded == 1
+    assert skipped == 0
+    assert uploader.events[1] == ("upload", "demo1", "soldier.png", "soldier", "军事")
+
+
 async def test_job_skips_failed_image_and_continues(studio_home):
     config = AppConfig(
         mode="upload_only",
@@ -208,8 +230,7 @@ def test_match_relay_preset_by_host():
     custom = "把山改成雪景，光线更冷。"
     assert effective_remix_prompt(custom) == custom
     copy_prompt = "参考这张图，直接把原图做出来。Refer to this image and directly create the original image."
-    assert effective_remix_prompt(copy_prompt) == DEFAULT_REMIX_PROMPT
-    assert "军事" in DEFAULT_REMIX_PROMPT
+    assert effective_remix_prompt(copy_prompt) == copy_prompt
 
 
 def test_apply_defaults_upgrades_cinematic_remix_prompt():

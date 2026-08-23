@@ -17,6 +17,7 @@ from wallpaper_studio.models import (
     effective_remix_prompt,
     title_api_settings,
 )
+from wallpaper_studio.sites import CQWALL_CATEGORY_LABELS, parse_category_reply
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 _DATA_URL = re.compile(r"^data:image/([^;]+);base64,(.+)$", re.DOTALL | re.IGNORECASE)
@@ -274,46 +275,56 @@ def prompt_asks_for_sunset(text: str) -> bool:
     return False
 
 
-SUBJECT_LOCK = (
-    "Hard subject lock: keep the reference photo's actual subject and category. "
-    "If the source shows soldiers, weapons, aircraft, or tactics, the result MUST stay military. "
-    "If it shows a person or anime character, keep that character. "
-    "Never turn people or military scenes into landscape, European streets, city squares, "
-    "or architecture-only scenery.\n"
-)
+def category_lock_text(category: str = "") -> str:
+    label = (category or "").strip()
+    if label:
+        return (
+            f"Source category is {label}. The output MUST stay {label}. "
+            "Do not switch 军事 to 风景, 动漫 to 风景, or change any other CQwall category.\n"
+        )
+    names = "、".join(name for _cid, name in CQWALL_CATEGORY_LABELS)
+    return (
+        "Keep the source photo's CQwall category. "
+        f"Allowed categories: {names}. "
+        "Military stays 军事, anime stays 动漫, scenery stays 风景. "
+        "Never turn people or military scenes into landscape, European streets, "
+        "city squares, or architecture-only scenery.\n"
+    )
 
 
-def build_remix_prompt(user_prompt: str) -> str:
+def build_remix_prompt(user_prompt: str, category: str = "") -> str:
     instruction = effective_remix_prompt(user_prompt)
     extra = ""
     if not prompt_asks_for_sunset(instruction):
         extra = (
             "Do not default to sunset, dusk, golden hour, or orange evening light "
-            "unless the instruction above explicitly asks for it. "
+            "unless the user remix prompt explicitly asks for it. "
             "Follow the requested time of day and color mood; if none is specified, "
             "use natural daylight that is clearly different from the reference photo.\n"
         )
     return (
-        f"Primary instruction:\n{instruction}\n\n"
-        "Edit the attached reference photo. Do not invent a new scene from the text alone. "
-        "The instruction above may change lighting and mood, but must not replace the subject. "
-        "Do not reply with text only, and do not return the original image unchanged.\n"
-        + SUBJECT_LOCK
+        f"Primary instruction (user remix prompt, must follow):\n{instruction}\n\n"
+        f"{category_lock_text(category)}"
+        "Apply the user remix prompt to the attached reference photo. "
+        "Do not ignore the user prompt. Do not change the source category.\n"
         + extra
     )
 
 
-def _generation_prompt_from_description(description: str, user_prompt: str) -> str:
+def _generation_prompt_from_description(
+    description: str,
+    user_prompt: str,
+    category: str = "",
+) -> str:
     instruction = effective_remix_prompt(user_prompt)
     scene = (description or "").strip()
     return (
-        f"Create a restyled version of this exact scene:\n{scene}\n\n"
-        f"Restyle instructions:\n{instruction}\n\n"
-        "Keep every main subject, person, vehicle, and the same category. "
-        "If the description includes soldiers or military gear, stay military. "
-        "If it includes a character, keep the character. "
-        "Do not output landscape, cityscape, plaza, or architecture-only scenery "
-        "unless that is already the described subject."
+        f"{category_lock_text(category)}"
+        f"Source subject:\n{scene}\n\n"
+        f"User remix prompt (must follow):\n{instruction}\n\n"
+        "Create a restyled version of that exact subject. "
+        "Follow the user remix prompt for lighting, mood, and style. "
+        "Keep every main subject and the same category."
     )
 
 
@@ -328,6 +339,7 @@ class RelayClient:
         self.timeout = timeout
         self.transport = transport
         self._resolved_key: str | None = None
+        self.last_source_category = ""
 
     def _headers(self) -> dict[str, str]:
         if not self._resolved_key:
@@ -505,6 +517,57 @@ class RelayClient:
             raise ApiError("文件名接口返回格式无法解析。") from exc
         return sanitize_filename(str(text), fallback=original_stem)
 
+    def classify_source(self, source: Path) -> tuple[str, str]:
+        """Identify the CQwall category and subject of a source photo."""
+        model = self.resolve_title_model() or "gpt-5.4-mini"
+        if not chat_model_supports_titles(model):
+            model = "gpt-5.4-mini"
+        labels = "、".join(name for _cid, name in CQWALL_CATEGORY_LABELS)
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You classify wallpaper photos. Return exactly two lines:\n"
+                        "CATEGORY: <one Chinese category>\n"
+                        "SUBJECT: <one English sentence naming the real subject>\n"
+                        "No extra text."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                f"Pick CATEGORY from: {labels}. "
+                                "Soldiers, weapons, aircraft, or tactics = 军事. "
+                                "Anime characters = 动漫. "
+                                "Landscape, street, plaza, or architecture-only = 风景. "
+                                "Do not call a military or character photo 风景."
+                            ),
+                        },
+                        {"type": "image_url", "image_url": {"url": _vision_data_url(source)}},
+                    ],
+                },
+            ],
+            "max_tokens": 200,
+        }
+        last_error: ApiError | None = None
+        for client in self._vision_clients():
+            try:
+                data = client._post_json("/v1/chat/completions", payload, timeout=40.0)
+                text = str(data["choices"][0]["message"]["content"]).strip()
+            except (ApiError, KeyError, IndexError, TypeError) as exc:
+                last_error = exc if isinstance(exc, ApiError) else ApiError("识图接口返回格式无法解析。")
+                continue
+            category, subject = parse_category_reply(text)
+            if category or subject:
+                return category, subject
+            last_error = ApiError("识图接口没有返回分类。")
+        raise last_error or ApiError("识图失败。")
+
     def remix_image(
         self,
         source: Path,
@@ -512,6 +575,8 @@ class RelayClient:
         title: str,
         *,
         allow_fallback: bool = True,
+        category: str = "",
+        subject: str = "",
     ) -> Path:
         mime = mimetypes.guess_type(source.name)[0] or "image/png"
         raw = source.read_bytes()
@@ -519,7 +584,13 @@ class RelayClient:
         data_url = f"data:{mime};base64,{encoded}"
         errors: list[str] = []
         _api_size, target = resolve_remix_size(self.settings.image_size)
-        prompt = build_remix_prompt(self.settings.remix_prompt)
+        if not category.strip():
+            try:
+                category, subject = self.classify_source(source)
+            except ApiError:
+                pass
+        self.last_source_category = (category or "").strip()
+        prompt = build_remix_prompt(self.settings.remix_prompt, category=category)
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
         size = official_image_size(self.settings.image_size)
 
@@ -531,7 +602,7 @@ class RelayClient:
             dest.write_bytes(image_bytes)
             return dest
 
-        for path, payload in self._remix_requests(data_url, mime):
+        for path, payload in self._remix_requests(data_url, mime, category=category):
             try:
                 data = self._post_json(path, payload, retries=3)
                 image_bytes, suffix = extract_image_payload(data, source.suffix)
@@ -557,10 +628,15 @@ class RelayClient:
         # edits/tools channel, so a 200 there would invent scenery. Only generate
         # without the file after a vision pass has named the real subject.
         described = ""
-        try:
-            described = self._describe_source_for_generation(source)
-        except ApiError as exc:
-            errors.append(f"/v1/chat/completions(识图): {exc}")
+        if subject.strip():
+            described = _generation_prompt_from_description(
+                subject, self.settings.remix_prompt, category
+            )
+        else:
+            try:
+                described = self._describe_source_for_generation(source, category=category)
+            except ApiError as exc:
+                errors.append(f"/v1/chat/completions(识图): {exc}")
         if described.strip():
             try:
                 data = self._post_json(
@@ -583,7 +659,14 @@ class RelayClient:
             fallback = self._fallback_image_client()
             if fallback is not None:
                 try:
-                    return fallback.remix_image(source, dest_dir, title, allow_fallback=False)
+                    return fallback.remix_image(
+                        source,
+                        dest_dir,
+                        title,
+                        allow_fallback=False,
+                        category=category,
+                        subject=subject,
+                    )
                 except ApiError as exc:
                     errors.append(f"备用生图 aipixapi: {exc}")
 
@@ -601,8 +684,10 @@ class RelayClient:
             transport=self.transport,
         )
 
-    def _remix_requests(self, data_url: str, mime: str) -> list[tuple[str, dict]]:
-        prompt = build_remix_prompt(self.settings.remix_prompt)
+    def _remix_requests(
+        self, data_url: str, mime: str, category: str = ""
+    ) -> list[tuple[str, dict]]:
+        prompt = build_remix_prompt(self.settings.remix_prompt, category=category)
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
         size = official_image_size(self.settings.image_size)
@@ -678,7 +763,7 @@ class RelayClient:
             *image_attempts,
         ]
 
-    def _describe_source_for_generation(self, source: Path) -> str:
+    def _describe_source_for_generation(self, source: Path, category: str = "") -> str:
         model = self.resolve_title_model() or "gpt-5.4-mini"
         if not chat_model_supports_titles(model):
             model = "gpt-5.4-mini"
@@ -724,7 +809,9 @@ class RelayClient:
                 continue
             text = text.strip(" \"'`")
             if text:
-                return _generation_prompt_from_description(text, self.settings.remix_prompt)
+                return _generation_prompt_from_description(
+                    text, self.settings.remix_prompt, category
+                )
             last_error = ApiError("识图接口没有返回提示词。")
         raise last_error or ApiError("识图失败。")
 

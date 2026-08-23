@@ -2,8 +2,22 @@ from pathlib import Path
 
 from wallpaper_studio.files import filter_by_min_size
 from wallpaper_studio.models import SiteProfile
-from wallpaper_studio.sites import cqwall_category_hint, cqwall_site, map_category
+from wallpaper_studio.sites import cqwall_category_hint, cqwall_site, map_category, parse_category_reply
 from tests.helpers import make_png
+
+
+def test_parse_category_reply_keeps_military_and_subject():
+    category, subject = parse_category_reply(
+        "CATEGORY: 军事\nSUBJECT: a soldier in tactical gear holding a rifle"
+    )
+    assert category == "军事"
+    assert "soldier" in subject
+
+
+def test_parse_category_reply_infers_military_from_prose():
+    category, subject = parse_category_reply("modern soldier in tactical gear with a rifle")
+    assert category == "军事"
+    assert "soldier" in subject
 
 
 def test_map_category_accepts_chinese_and_ids():

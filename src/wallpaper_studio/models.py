@@ -17,15 +17,6 @@ DEFAULT_REMIX_PROMPT = (
     "Change lighting and detail only. Do not copy the original pixels. "
     "Do not default to sunset, dusk, or golden hour unless the prompt asks for it."
 )
-_COPY_ORIGINAL_MARKERS = (
-    "直接把原图做出来",
-    "直接做出来",
-    "把原图做出来",
-    "refer to this image and directly create the original",
-    "directly create the original image",
-    "create the original image",
-    "复制原图",
-)
 _WEAK_REMIX_PROMPTS = {
     "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details.",
     "Restyle this image as a desktop wallpaper.",
@@ -51,25 +42,10 @@ _WEAK_REMIX_PROMPTS = {
 }
 
 
-def is_copy_original_prompt(text: str | None) -> bool:
-    """True when the user tried to say 'just recreate the source photo'."""
-    raw = (text or "").strip()
-    if not raw:
-        return False
-    lowered = raw.lower()
-    for marker in _COPY_ORIGINAL_MARKERS:
-        if marker.isascii():
-            if marker.lower() in lowered:
-                return True
-        elif marker in raw:
-            return True
-    return False
-
-
 def effective_remix_prompt(value: str | None) -> str:
-    """Blank, leftover, or 'copy the original' prompts must lock the subject."""
+    """Blank or leftover built-in prompts get a default. User text is kept as-is."""
     text = (value or "").strip()
-    if not text or text in _WEAK_REMIX_PROMPTS or is_copy_original_prompt(text):
+    if not text or text in _WEAK_REMIX_PROMPTS:
         return DEFAULT_REMIX_PROMPT
     return text
 
@@ -404,6 +380,7 @@ class UploadTask(BaseModel):
 class PreparedImage:
     path: Path
     title: str
+    category: str = ""
 
 
 class AccountBatch(BaseModel):

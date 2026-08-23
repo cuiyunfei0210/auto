@@ -350,7 +350,7 @@ async def upload_batches(
                     raise JobStopped("已手动停止")
                 title = item.title
                 try:
-                    await client.upload_image(item.path, title, site.category_value)
+                    await client.upload_image(item.path, title, item.category or site.category_value)
                     uploaded += 1
                 except asyncio.CancelledError:
                     raise

@@ -183,8 +183,8 @@
           </datalist>
           <label>写标题接口（可留空）<input id="filename_base_url" placeholder="https://api.newxxt.top"></label>
           <label>对话 API Key<input id="filename_api_key" type="password" placeholder="跟生图不是同一组 Key 时再填"></label>
-          <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="留空会锁定原图主体并改光线。想避免黄昏，请写清时段，例如正午、阴天、夜晚、冷色调。不要写「把原图做出来」"></textarea></label>
-          <p class="hint">提示词只改光线和风格。程序会锁定原图主体：军事图不会二创成风景，人物/动漫不会变成建筑街景。不要写「参考这张图，直接把原图做出来」——中转站文生图看不到原图时就会乱出风景。</p>
+          <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="按你的二创要求写，例如正午冷色调、更锐利。原图分类会保持不变"></textarea></label>
+          <p class="hint">会按你填的二创提示词生成。无论是按原图改图，还是先识图再文生图，原图分类都不变：军事还是军事，动漫还是动漫，不会改成风景。上传时也用识别到的原图分类，而不是一律填风景。</p>
           <label>文件名提示词（根据图片生成上传标题）<textarea id="filename_prompt" rows="3" placeholder="Write a short English wallpaper title, max 18 characters"></textarea></label>
           <label>出图尺寸<input id="image_size" list="image-size-options" placeholder="1920x1080"></label>
           <datalist id="image-size-options">

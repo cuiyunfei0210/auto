@@ -53,6 +53,65 @@ def cqwall_category_hint() -> str:
     return " / ".join(f"{cid} {name}" for cid, name in CQWALL_CATEGORY_LABELS)
 
 
+def category_label(value: str) -> str:
+    """Map a CQwall id, English name, or Chinese name to the Chinese label."""
+    mapped = map_category(value)
+    for cid, name in CQWALL_CATEGORY_LABELS:
+        if mapped == cid:
+            return name
+    return (value or "").strip()
+
+
+_CATEGORY_HINTS = (
+    ("军事", ("soldier", "military", "weapon", "tactical", "helicopter", "rifle", "士兵", "军事", "战机")),
+    ("动漫", ("anime", "动漫")),
+    ("汽车", ("car", "cars", "vehicle", "汽车")),
+    ("动物", ("animal", "animals", "dog", "cat", "动物")),
+    ("游戏", ("game", "games", "游戏")),
+    ("美女", ("girl", "美女")),
+    ("都市", ("urban", "city street", "都市")),
+    ("宇宙", ("space", "galaxy", "universe", "宇宙")),
+    ("风景", ("landscape", "scenery", "mountain", "lake", "风景")),
+)
+
+
+def infer_category_label(text: str) -> str:
+    import re
+
+    raw = text or ""
+    lowered = raw.lower()
+    for label, needles in _CATEGORY_HINTS:
+        for needle in needles:
+            if needle.isascii():
+                if re.search(rf"\b{re.escape(needle.lower())}\b", lowered):
+                    return label
+            elif needle in raw:
+                return label
+    return ""
+
+
+def parse_category_reply(text: str) -> tuple[str, str]:
+    """Parse vision output into (CQwall category label, subject description)."""
+    category = ""
+    subject = ""
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        key, _, rest = stripped.partition(":")
+        label = key.strip().lower()
+        value = rest.strip().strip(" \"'`")
+        if label in {"category", "分类"} and value:
+            category = category_label(value) or infer_category_label(value)
+        elif label in {"subject", "主体"} and value:
+            subject = value
+    if not category:
+        category = infer_category_label(text)
+    if not subject:
+        subject = (text or "").strip()
+    return category, subject
+
+
 def map_category(value: str) -> str:
     text = (value or "").strip()
     if not text:
