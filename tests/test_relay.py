@@ -32,6 +32,7 @@ def test_friendly_message_for_image_generation_tools_error():
     assert "images/edits" in text
     assert "文生图" in text
     assert "跳过二创" in text
+    assert "军事会变成风景" in text
     assert friendly_error_message(text) == text
 
 
@@ -116,11 +117,11 @@ def test_remix_image_model_uses_clean_edits_endpoint(tmp_path: Path):
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
     assert dest.read_bytes() == source.read_bytes()
-    assert seen[0].endswith("/v1/images/generations")
-    assert "/v1/images/edits" in seen
+    assert seen[0].endswith("/v1/images/edits")
+    assert seen.count("/v1/images/generations") == 0
 
 
-def test_remix_uses_generations_when_that_is_what_the_relay_tests(tmp_path: Path):
+def test_remix_does_not_treat_panel_generations_as_image_edit(tmp_path: Path):
     source = make_png(tmp_path / "night.png")
     image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
     seen: list[str] = []
@@ -128,6 +129,8 @@ def test_remix_uses_generations_when_that_is_what_the_relay_tests(tmp_path: Path
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request.url.path)
         if request.url.path.endswith("/v1/images/generations"):
+            return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        if request.url.path.endswith("/v1/images/edits"):
             body = json.loads(request.content)
             assert body["model"] == "gpt-image-2"
             assert body["images"][0]["image_url"].startswith("data:image")
@@ -143,7 +146,8 @@ def test_remix_uses_generations_when_that_is_what_the_relay_tests(tmp_path: Path
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
-    assert seen == ["/v1/images/generations"]
+    assert seen[0].endswith("/v1/images/edits")
+    assert "/v1/images/generations" not in seen
 
 
 def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
@@ -166,9 +170,12 @@ def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
                 isinstance(item, dict) and item.get("type") == "image_url"
                 for item in body["messages"][1]["content"]
             )
+            vision_text = body["messages"][1]["content"][0]["text"]
+            assert "soldiers" in vision_text
+            assert "landscape wallpaper" in vision_text
             return httpx.Response(
                 200,
-                json={"choices": [{"message": {"content": "snowy alpine lake wallpaper, noon light"}}]},
+                json={"choices": [{"message": {"content": "modern soldier in tactical gear with a rifle"}}]},
             )
         if request.url.path.endswith("/v1/images/generations"):
             if "image" in body or "images" in body:
@@ -176,7 +183,9 @@ def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
                     400,
                     json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
                 )
-            assert body["prompt"] == "snowy alpine lake wallpaper, noon light"
+            assert "modern soldier in tactical gear" in body["prompt"]
+            assert "Keep every main subject" in body["prompt"]
+            assert "stay military" in body["prompt"]
             assert body.get("quality") == "medium"
             assert "image" not in body
             return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
@@ -193,12 +202,13 @@ def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
     assert dest.exists()
     assert dest.read_bytes() == source.read_bytes()
     assert "/v1/chat/completions" in seen
-    assert seen.count("/v1/images/generations") >= 2
+    assert seen.count("/v1/images/generations") == 1
 
 
-def test_remix_falls_back_to_plain_generations_when_vision_fails(tmp_path: Path):
+def test_remix_does_not_silently_text_to_image_when_vision_fails(tmp_path: Path, monkeypatch):
     source = make_png(tmp_path / "night.png")
     image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    monkeypatch.setattr("wallpaper_studio.relay.wait_or_stop", lambda _seconds: None)
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.headers.get("content-type", "").startswith("multipart/"):
@@ -206,7 +216,7 @@ def test_remix_falls_back_to_plain_generations_when_vision_fails(tmp_path: Path)
                 400,
                 json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
             )
-        body = json.loads(request.content)
+        body = json.loads(request.content) if request.content else {}
         if request.url.path.endswith("/v1/images/generations") and "image" not in body and "images" not in body:
             return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
         return httpx.Response(
@@ -218,9 +228,13 @@ def test_remix_falls_back_to_plain_generations_when_vision_fails(tmp_path: Path)
         ApiSettings(api_key="sk-test", image_size="1024x1024"),
         transport=httpx.MockTransport(handler),
     )
-    dest = client.remix_image(source, tmp_path / "out", "星河")
-    assert dest.exists()
-    assert dest.read_bytes() == source.read_bytes()
+    try:
+        client.remix_image(source, tmp_path / "out", "星河")
+    except ApiError as exc:
+        text = str(exc)
+    else:
+        raise AssertionError("prompt-only generations must not count as remix")
+    assert "识图" in text or "images/edits" in text
 
 
 def test_remix_falls_back_to_aipix_when_newxxt_tools_path_is_broken(tmp_path: Path, monkeypatch):
@@ -276,8 +290,9 @@ def test_remix_falls_back_to_multipart_edits(tmp_path: Path):
     )
     dest = client.remix_image(source, tmp_path / "out", "星河")
     assert dest.exists()
-    assert "/v1/images/generations:json" in seen
+    assert "/v1/images/edits:json" in seen
     assert "/v1/images/edits:multipart" in seen
+    assert "/v1/images/generations:json" not in seen
 
 
 def test_remix_explains_that_panel_text_to_image_is_not_edits(tmp_path: Path, monkeypatch):
@@ -435,10 +450,11 @@ def test_empty_remix_prompt_sends_strong_restyle_instruction():
     settings.remix_prompt = "   "
     client = RelayClient(settings)
     path, payload = client._remix_requests("data:image/png;base64,xx", "image/png")[0]
-    assert path == "/v1/images/generations"
+    assert path == "/v1/images/edits"
     assert payload["prompt"].startswith("Primary instruction:")
     assert "禁止原样" in payload["prompt"]
-    assert "near-identical" in payload["prompt"]
+    assert "Military stays military" in payload["prompt"]
+    assert "Never turn people or military" in payload["prompt"]
     assert "Do not default to sunset" in payload["prompt"]
     assert "Restyle this image as a desktop wallpaper." not in payload["prompt"]
     assert "Cinematic lighting" not in payload["prompt"]
@@ -449,6 +465,7 @@ def test_custom_remix_prompt_is_primary_and_does_not_force_sunset():
     assert "把山改成雪景" in prompt
     assert prompt.startswith("Primary instruction:")
     assert "Do not default to sunset" in prompt
+    assert "Never turn people or military" in prompt
 
 
 def test_sunset_prompt_skips_anti_dusk_guard():

@@ -6,17 +6,38 @@ from pathlib import Path
 from pydantic import BaseModel, Field, field_validator
 
 DEFAULT_REMIX_PROMPT = (
-    "根据参考图做一张全新的高质量桌面壁纸。保留主体，但必须按提示改光线、色调和氛围，禁止原样复制。"
-    "锐利细节，没有水印和文字。"
+    "根据参考图做二创：必须保留原图的主体、人物、装备、场景类型和构图。"
+    "原图如果是军事/士兵/武器/战机，结果也必须是军事，禁止改成风景、城市广场、街道或只有建筑的空镜头。"
+    "原图如果是人物或动漫角色，必须保留同一类角色，禁止改成风景。"
+    "只改画质、光线、色调和细节，不要换题材。禁止原样复制像素。"
     "不要默认做成黄昏、日落或金橙色晚霞，除非提示词明确要求。"
-    " Create a brand-new desktop wallpaper from this reference. Keep the subject, "
-    "but change lighting and mood as instructed. Do not copy the original pixels "
-    "or return a near-identical image. Sharp details, no watermarks. "
+    " Restyle this reference. Keep the same subject, people, gear, and scene type. "
+    "Military stays military; characters stay characters. Never replace the subject "
+    "with landscape, cityscape, plaza, or architecture-only scenery. "
+    "Change lighting and detail only. Do not copy the original pixels. "
     "Do not default to sunset, dusk, or golden hour unless the prompt asks for it."
+)
+_COPY_ORIGINAL_MARKERS = (
+    "直接把原图做出来",
+    "直接做出来",
+    "把原图做出来",
+    "refer to this image and directly create the original",
+    "directly create the original image",
+    "create the original image",
+    "复制原图",
 )
 _WEAK_REMIX_PROMPTS = {
     "Keep the same subject, restyle as a high-quality desktop wallpaper, cinematic lighting, sharp details.",
     "Restyle this image as a desktop wallpaper.",
+    (
+        "根据参考图做一张全新的高质量桌面壁纸。保留主体，但必须按提示改光线、色调和氛围，禁止原样复制。"
+        "锐利细节，没有水印和文字。"
+        "不要默认做成黄昏、日落或金橙色晚霞，除非提示词明确要求。"
+        " Create a brand-new desktop wallpaper from this reference. Keep the subject, "
+        "but change lighting and mood as instructed. Do not copy the original pixels "
+        "or return a near-identical image. Sharp details, no watermarks. "
+        "Do not default to sunset, dusk, or golden hour unless the prompt asks for it."
+    ),
     (
         "把这张参考图做成一张全新的高质量桌面壁纸。"
         "保留主体和构图，但必须明显改变光线、色调、材质、细节和氛围，"
@@ -30,10 +51,25 @@ _WEAK_REMIX_PROMPTS = {
 }
 
 
+def is_copy_original_prompt(text: str | None) -> bool:
+    """True when the user tried to say 'just recreate the source photo'."""
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    lowered = raw.lower()
+    for marker in _COPY_ORIGINAL_MARKERS:
+        if marker.isascii():
+            if marker.lower() in lowered:
+                return True
+        elif marker in raw:
+            return True
+    return False
+
+
 def effective_remix_prompt(value: str | None) -> str:
-    """Blank or leftover weak prompts must restyle, not copy the template."""
+    """Blank, leftover, or 'copy the original' prompts must lock the subject."""
     text = (value or "").strip()
-    if not text or text in _WEAK_REMIX_PROMPTS:
+    if not text or text in _WEAK_REMIX_PROMPTS or is_copy_original_prompt(text):
         return DEFAULT_REMIX_PROMPT
     return text
 

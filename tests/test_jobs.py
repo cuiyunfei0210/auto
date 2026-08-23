@@ -207,6 +207,9 @@ def test_match_relay_preset_by_host():
     assert effective_remix_prompt("Restyle this image as a desktop wallpaper.") == DEFAULT_REMIX_PROMPT
     custom = "把山改成雪景，光线更冷。"
     assert effective_remix_prompt(custom) == custom
+    copy_prompt = "参考这张图，直接把原图做出来。Refer to this image and directly create the original image."
+    assert effective_remix_prompt(copy_prompt) == DEFAULT_REMIX_PROMPT
+    assert "军事" in DEFAULT_REMIX_PROMPT
 
 
 def test_apply_defaults_upgrades_cinematic_remix_prompt():

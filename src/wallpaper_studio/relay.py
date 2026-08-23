@@ -51,7 +51,8 @@ def friendly_error_message(raw: str) -> str:
             "壁纸工坊二创要按原图改图，会打 /v1/images/edits；"
             "这条改图通道仍在报 Tool choice 'image_generation' not found in 'tools'。"
             "请让中转站给 gpt-image-2 打开「改图 / images/edits」。"
-            "程序会先识图，再走带 quality 的文生图，并自动重试。"
+            "程序会先走改图；改图不通才会先识图再文生图，并且会锁定原图主体。"
+            "不会在没看过原图时直接文生图，否则军事会变成风景。"
             "这个站的文生图线路会抖动，后台刚测通小狗，程序这边有时仍会被转进坏掉的 tools 通道。"
             "请再跑一次；还不行就暂时改用「跳过二创」。"
         )
@@ -273,6 +274,15 @@ def prompt_asks_for_sunset(text: str) -> bool:
     return False
 
 
+SUBJECT_LOCK = (
+    "Hard subject lock: keep the reference photo's actual subject and category. "
+    "If the source shows soldiers, weapons, aircraft, or tactics, the result MUST stay military. "
+    "If it shows a person or anime character, keep that character. "
+    "Never turn people or military scenes into landscape, European streets, city squares, "
+    "or architecture-only scenery.\n"
+)
+
+
 def build_remix_prompt(user_prompt: str) -> str:
     instruction = effective_remix_prompt(user_prompt)
     extra = ""
@@ -285,10 +295,25 @@ def build_remix_prompt(user_prompt: str) -> str:
         )
     return (
         f"Primary instruction:\n{instruction}\n\n"
-        "Generate a newly edited wallpaper from the reference photo. "
-        "The instruction above has priority over the reference photo's lighting and color. "
+        "Edit the attached reference photo. Do not invent a new scene from the text alone. "
+        "The instruction above may change lighting and mood, but must not replace the subject. "
         "Do not reply with text only, and do not return the original image unchanged.\n"
+        + SUBJECT_LOCK
         + extra
+    )
+
+
+def _generation_prompt_from_description(description: str, user_prompt: str) -> str:
+    instruction = effective_remix_prompt(user_prompt)
+    scene = (description or "").strip()
+    return (
+        f"Create a restyled version of this exact scene:\n{scene}\n\n"
+        f"Restyle instructions:\n{instruction}\n\n"
+        "Keep every main subject, person, vehicle, and the same category. "
+        "If the description includes soldiers or military gear, stay military. "
+        "If it includes a character, keep the character. "
+        "Do not output landscape, cityscape, plaza, or architecture-only scenery "
+        "unless that is already the described subject."
     )
 
 
@@ -515,39 +540,34 @@ class RelayClient:
                 continue
             return _save(image_bytes, suffix)
 
-        for path in ("/v1/images/generations", "/v1/images/edits"):
-            try:
-                data = self._post_multipart(
-                    path,
-                    files={"image": (source.name, raw, mime)},
-                    data={"model": image_model, "prompt": prompt, "size": size, "n": "1"},
-                    retries=1,
-                )
-                image_bytes, suffix = extract_image_payload(data, source.suffix)
-                return _save(image_bytes, suffix)
-            except ApiError as exc:
-                errors.append(f"{path}(multipart): {exc}")
+        try:
+            data = self._post_multipart(
+                "/v1/images/edits",
+                files={"image": (source.name, raw, mime)},
+                data={"model": image_model, "prompt": prompt, "size": size, "n": "1"},
+                retries=1,
+            )
+            image_bytes, suffix = extract_image_payload(data, source.suffix)
+            return _save(image_bytes, suffix)
+        except ApiError as exc:
+            errors.append(f"/v1/images/edits(multipart): {exc}")
 
-        # newxxt's working admin test is clean /v1/images/generations.
-        # Extra image fields on that path are rewritten to the broken edits/tools
-        # channel, so describe the source first, then generate without image fields.
+        # newxxt's admin-panel generations test is text-to-image. Extra image
+        # fields on that path are either stripped or rewritten to the broken
+        # edits/tools channel, so a 200 there would invent scenery. Only generate
+        # without the file after a vision pass has named the real subject.
         described = ""
         try:
             described = self._describe_source_for_generation(source)
         except ApiError as exc:
             errors.append(f"/v1/chat/completions(识图): {exc}")
-        for label, generation_prompt in (
-            ("/v1/images/generations(识图文生图)", described),
-            ("/v1/images/generations(文生图)", prompt),
-        ):
-            if not generation_prompt.strip():
-                continue
+        if described.strip():
             try:
                 data = self._post_json(
                     "/v1/images/generations",
                     {
                         "model": image_model,
-                        "prompt": generation_prompt,
+                        "prompt": described,
                         "size": size,
                         "quality": "medium",
                     },
@@ -557,7 +577,7 @@ class RelayClient:
                 image_bytes, suffix = extract_image_payload(data, source.suffix)
                 return _save(image_bytes, suffix)
             except ApiError as exc:
-                errors.append(f"{label}: {exc}")
+                errors.append(f"/v1/images/generations(识图文生图): {exc}")
 
         if allow_fallback:
             fallback = self._fallback_image_client()
@@ -586,20 +606,6 @@ class RelayClient:
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
         size = official_image_size(self.settings.image_size)
-        gen_base = {
-            "model": image_model,
-            "prompt": prompt,
-            "size": size,
-            "quality": "medium",
-        }
-        generations = (
-            "/v1/images/generations",
-            {**gen_base, "images": [{"image_url": data_url}], "image": data_url},
-        )
-        generations_image = (
-            "/v1/images/generations",
-            {**gen_base, "image": data_url},
-        )
         edits = (
             "/v1/images/edits",
             {
@@ -618,10 +624,11 @@ class RelayClient:
                 "size": size,
             },
         )
-        image_attempts = [generations, generations_image, edits, edits_single]
+        image_attempts = [edits, edits_single]
         if not chat_model_supports_titles(chat_model):
-            # gpt-image-2 is not a chat model. Prefer the generations channel
-            # that relay admin panels test, then fall back to edits.
+            # gpt-image-2 is not a chat model. Prefer true image edits. Do not
+            # call /v1/images/generations here: that path ignores the source
+            # photo and turns military/character images into scenery.
             return image_attempts
         tool = {
             "type": "image_generation",
@@ -675,14 +682,14 @@ class RelayClient:
         model = self.resolve_title_model() or "gpt-5.4-mini"
         if not chat_model_supports_titles(model):
             model = "gpt-5.4-mini"
-        instruction = effective_remix_prompt(self.settings.remix_prompt)
         payload = {
             "model": model,
             "messages": [
                 {
                     "role": "system",
                     "content": (
-                        "You write image-generation prompts. Return only the prompt text. "
+                        "You describe photos so another model can restyle them. "
+                        "Return only a factual English description. "
                         "No quotes, no markdown, no explanation."
                     ),
                 },
@@ -692,10 +699,13 @@ class RelayClient:
                         {
                             "type": "text",
                             "text": (
-                                "Look at this wallpaper photo. Write one detailed English "
-                                "image-generation prompt for a brand-new wallpaper. "
-                                "Keep the same subject, but follow these restyle instructions:\n"
-                                f"{instruction}"
+                                "Describe this photo exactly as it is: who or what is in it, "
+                                "clothing, gear, vehicles, and setting. "
+                                "If there are soldiers, weapons, aircraft, or tactics, say so. "
+                                "If there is a person or anime character, describe them. "
+                                "Do not turn it into a generic landscape wallpaper, "
+                                "European street, city square, or architecture-only scene "
+                                "unless that is literally all the photo contains."
                             ),
                         },
                         {"type": "image_url", "image_url": {"url": _vision_data_url(source)}},
@@ -714,7 +724,7 @@ class RelayClient:
                 continue
             text = text.strip(" \"'`")
             if text:
-                return text
+                return _generation_prompt_from_description(text, self.settings.remix_prompt)
             last_error = ApiError("识图接口没有返回提示词。")
         raise last_error or ApiError("识图失败。")
 

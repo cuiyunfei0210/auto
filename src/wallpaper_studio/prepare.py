@@ -64,7 +64,7 @@ def prepare_images(
         removed = clear_images_in_dir(dest)
         if removed:
             emit(f"已清空输出目录里上次留下的 {removed} 张图，本轮二创数量会和源图一致。")
-        emit("二创会按你填的提示词改图，不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
+        emit("二创会锁定原图主体（军事还是军事，人物还是人物），不会改成风景；提示词只负责光线和风格。不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
 
     def cancelled() -> bool:
         if stop_check and stop_check():
