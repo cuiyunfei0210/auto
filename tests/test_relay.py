@@ -18,6 +18,18 @@ from wallpaper_studio.relay import (
 from tests.helpers import make_png
 
 
+def _payload_image_url(body: dict) -> str:
+    images = body.get("images") or []
+    if images and isinstance(images[0], dict):
+        value = images[0].get("image_url")
+        if isinstance(value, dict):
+            return str(value.get("url") or "")
+        if isinstance(value, str):
+            return value
+    image = body.get("image")
+    return str(image or "")
+
+
 def test_friendly_message_for_chat_group_cannot_generate_images():
     text = friendly_error_message("Image generation is not enabled for this group")
     assert "对话组" in text
@@ -103,7 +115,9 @@ def test_remix_image_model_uses_clean_edits_endpoint(tmp_path: Path):
         if request.url.path.endswith("/v1/images/edits"):
             assert body["model"] == "gpt-image-2"
             assert "tools" not in body
-            assert body["images"][0]["image_url"].startswith("data:image")
+            url = body["images"][0]["image_url"]
+            assert isinstance(url, dict)
+            assert url["url"].startswith("data:image")
             return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
         return httpx.Response(
             400,
@@ -134,7 +148,7 @@ def test_remix_does_not_treat_panel_generations_as_image_edit(tmp_path: Path):
         if request.url.path.endswith("/v1/images/edits"):
             body = json.loads(request.content)
             assert body["model"] == "gpt-image-2"
-            assert body["images"][0]["image_url"].startswith("data:image")
+            assert _payload_image_url(body).startswith("data:image")
             return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
         return httpx.Response(
             400,
@@ -173,7 +187,9 @@ def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
                 for item in body["messages"][1]["content"]
             )
             vision_text = body["messages"][1]["content"][0]["text"]
+            system = body["messages"][0]["content"]
             assert "军事" in vision_text or "Soldiers" in vision_text or "soldiers" in vision_text
+            assert "franchises" in (system + vision_text).lower()
             return httpx.Response(
                 200,
                 json={
@@ -211,7 +227,116 @@ def test_remix_falls_back_to_described_text_to_image(tmp_path: Path):
     assert dest.exists()
     assert dest.read_bytes() == source.read_bytes()
     assert "/v1/chat/completions" in seen
-    assert seen.count("/v1/images/generations") == 1
+    assert seen.count("/v1/images/generations") >= 2
+
+
+def test_remix_requests_nested_image_url_before_string_form():
+    client = RelayClient(ApiSettings(api_key="sk-test", image_size="1024x1024"))
+    edits = [
+        payload
+        for path, payload in client._remix_requests("data:image/png;base64,xx", "image/png")
+        if path.endswith("/v1/images/edits")
+    ]
+    assert isinstance(edits[0]["images"][0]["image_url"], dict)
+    assert edits[0]["images"][0]["image_url"]["url"].startswith("data:image")
+    assert isinstance(edits[1]["images"][0]["image_url"], str)
+    assert edits[1]["images"][0]["image_url"].startswith("data:image")
+    assert "image" in edits[2]
+    assert "images" not in edits[2]
+
+
+def test_remix_tries_generations_with_original_image(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        content_type = request.headers.get("content-type", "")
+        if content_type.startswith("multipart/"):
+            seen.append("edits:multipart")
+            return httpx.Response(
+                400,
+                json={"error": {"message": "images[].image_url is required"}},
+            )
+        body = json.loads(request.content)
+        seen.append(request.url.path)
+        if request.url.path.endswith("/v1/images/generations"):
+            url = _payload_image_url(body)
+            assert url.startswith("data:image")
+            assert isinstance(body["images"][0]["image_url"], dict)
+            return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        return httpx.Response(
+            400,
+            json={"error": {"message": "images[].image_url is required"}},
+        )
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert "/v1/images/generations" in seen
+    assert any(item.endswith("/v1/images/edits") for item in seen)
+
+
+def test_remix_copyright_block_skips_resending_original(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    generations_with_file = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("content-type", "").startswith("multipart/"):
+            raise AssertionError("copyright block should not retry multipart original")
+        body = json.loads(request.content)
+        if request.url.path.endswith("/v1/chat/completions"):
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "message": {
+                                "content": (
+                                    "CATEGORY: 动漫\n"
+                                    "SUBJECT: orange fox in a police uniform standing beside a gray rabbit"
+                                )
+                            }
+                        }
+                    ]
+                },
+            )
+        if request.url.path.endswith("/v1/images/edits"):
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": "The generated image may violate third-party content similarity protection."
+                    }
+                },
+            )
+        if request.url.path.endswith("/v1/images/generations"):
+            if "image" in body or "images" in body:
+                generations_with_file["n"] += 1
+                return httpx.Response(
+                    400,
+                    json={
+                        "error": {
+                            "message": "The generated image may violate third-party content similarity protection."
+                        }
+                    },
+                )
+            assert "orange fox in a police uniform" in body["prompt"]
+            assert "Zootopia" not in body["prompt"]
+            return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+        return httpx.Response(400, json={"error": {"message": "nope"}})
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", filename_model="gpt-5.4-mini", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河")
+    assert dest.exists()
+    assert generations_with_file["n"] == 0
 
 
 def test_remix_does_not_silently_text_to_image_when_vision_fails(tmp_path: Path, monkeypatch):

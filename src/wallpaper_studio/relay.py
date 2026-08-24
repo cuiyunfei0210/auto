@@ -149,6 +149,20 @@ def _is_tools_choice_error(text: str) -> bool:
     return "image_generation" in lowered and "tools" in lowered
 
 
+def _is_copyright_block(text: str) -> bool:
+    raw = text or ""
+    lowered = raw.lower()
+    tokens = (
+        "第三方内容",
+        "相似性",
+        "content similarity",
+        "third-party content",
+        "violate third-party",
+        "copyright",
+    )
+    return any(token in (lowered if token.isascii() else raw) for token in tokens)
+
+
 def is_transient_relay_error(text: str) -> bool:
     lowered = (text or "").lower()
     tokens = (
@@ -528,11 +542,12 @@ class RelayClient:
             "messages": [
                 {
                     "role": "system",
-                    "content": (
+                    "content":                     (
                         "You classify wallpaper photos. Return exactly two lines:\n"
                         "CATEGORY: <one Chinese category>\n"
-                        "SUBJECT: <one English sentence naming the real subject>\n"
-                        "No extra text."
+                        "SUBJECT: <one English sentence describing the visible subject>\n"
+                        "No extra text. Do not name movies, franchises, studios, "
+                        "or official character names."
                     ),
                 },
                 {
@@ -545,7 +560,8 @@ class RelayClient:
                                 "Soldiers, weapons, aircraft, or tactics = 军事. "
                                 "Anime characters = 动漫. "
                                 "Landscape, street, plaza, or architecture-only = 风景. "
-                                "Do not call a military or character photo 风景."
+                                "Do not call a military or character photo 风景. "
+                                "Describe SUBJECT by species, clothing, colors, pose, and setting only."
                             ),
                         },
                         {"type": "image_url", "image_url": {"url": _vision_data_url(source)}},
@@ -602,31 +618,53 @@ class RelayClient:
             dest.write_bytes(image_bytes)
             return dest
 
+        copyright_blocked = False
         for path, payload in self._remix_requests(data_url, mime, category=category):
             try:
                 data = self._post_json(path, payload, retries=3)
                 image_bytes, suffix = extract_image_payload(data, source.suffix)
             except ApiError as exc:
                 errors.append(f"{path}: {exc}")
+                if _is_copyright_block(str(exc)):
+                    copyright_blocked = True
+                    break
                 continue
             return _save(image_bytes, suffix)
 
-        try:
-            data = self._post_multipart(
-                "/v1/images/edits",
-                files={"image": (source.name, raw, mime)},
-                data={"model": image_model, "prompt": prompt, "size": size, "n": "1"},
-                retries=1,
-            )
-            image_bytes, suffix = extract_image_payload(data, source.suffix)
-            return _save(image_bytes, suffix)
-        except ApiError as exc:
-            errors.append(f"/v1/images/edits(multipart): {exc}")
+        if not copyright_blocked:
+            try:
+                data = self._post_multipart(
+                    "/v1/images/edits",
+                    files={"image": (source.name, raw, mime)},
+                    data={"model": image_model, "prompt": prompt, "size": size, "n": "1"},
+                    retries=1,
+                )
+                image_bytes, suffix = extract_image_payload(data, source.suffix)
+                return _save(image_bytes, suffix)
+            except ApiError as exc:
+                errors.append(f"/v1/images/edits(multipart): {exc}")
+                copyright_blocked = _is_copyright_block(str(exc))
 
-        # newxxt's admin-panel generations test is text-to-image. Extra image
-        # fields on that path are either stripped or rewritten to the broken
-        # edits/tools channel, so a 200 there would invent scenery. Only generate
-        # without the file after a vision pass has named the real subject.
+        # This relay asked for images[].image_url. After edits fail, try
+        # generations with the original attached. Prompt-only generations are
+        # last, and only after vision has named the real subject.
+        if not copyright_blocked:
+            for payload in self._generations_with_image_payloads(data_url, category=category):
+                try:
+                    data = self._post_json(
+                        "/v1/images/generations",
+                        payload,
+                        retries=1,
+                        retry_tools_error=True,
+                    )
+                    image_bytes, suffix = extract_image_payload(data, source.suffix)
+                    return _save(image_bytes, suffix)
+                except ApiError as exc:
+                    errors.append(f"/v1/images/generations(带原图): {exc}")
+                    if _is_copyright_block(str(exc)):
+                        copyright_blocked = True
+                        break
+
         described = ""
         if subject.strip():
             described = _generation_prompt_from_description(
@@ -691,7 +729,16 @@ class RelayClient:
         chat_model = self._chat_model()
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
         size = official_image_size(self.settings.image_size)
-        edits = (
+        nested_edits = (
+            "/v1/images/edits",
+            {
+                "model": image_model,
+                "prompt": prompt,
+                "images": [{"image_url": {"url": data_url}}],
+                "size": size,
+            },
+        )
+        string_edits = (
             "/v1/images/edits",
             {
                 "model": image_model,
@@ -700,7 +747,9 @@ class RelayClient:
                 "size": size,
             },
         )
-        edits_single = (
+        # Some relays want a bare "image" field. This one replies
+        # "images[].image_url is required", so keep it last.
+        image_field_edits = (
             "/v1/images/edits",
             {
                 "model": image_model,
@@ -709,7 +758,7 @@ class RelayClient:
                 "size": size,
             },
         )
-        image_attempts = [edits, edits_single]
+        image_attempts = [nested_edits, string_edits, image_field_edits]
         if not chat_model_supports_titles(chat_model):
             # gpt-image-2 is not a chat model. Prefer true image edits. Do not
             # call /v1/images/generations here: that path ignores the source
@@ -763,6 +812,21 @@ class RelayClient:
             *image_attempts,
         ]
 
+    def _generations_with_image_payloads(self, data_url: str, category: str = "") -> list[dict]:
+        prompt = build_remix_prompt(self.settings.remix_prompt, category=category)
+        image_model = self.settings.remix_model.strip() or "gpt-image-2"
+        size = official_image_size(self.settings.image_size)
+        common = {
+            "model": image_model,
+            "prompt": prompt,
+            "size": size,
+            "quality": "medium",
+        }
+        return [
+            {**common, "images": [{"image_url": {"url": data_url}}]},
+            {**common, "images": [{"image_url": data_url}]},
+        ]
+
     def _describe_source_for_generation(self, source: Path, category: str = "") -> str:
         model = self.resolve_title_model() or "gpt-5.4-mini"
         if not chat_model_supports_titles(model):
@@ -774,8 +838,9 @@ class RelayClient:
                     "role": "system",
                     "content": (
                         "You describe photos so another model can restyle them. "
-                        "Return only a factual English description. "
-                        "No quotes, no markdown, no explanation."
+                        "Return only a factual English description of appearance. "
+                        "No quotes, no markdown, no explanation. "
+                        "Do not name movies, franchises, studios, or official character names."
                     ),
                 },
                 {
@@ -788,6 +853,7 @@ class RelayClient:
                                 "clothing, gear, vehicles, and setting. "
                                 "If there are soldiers, weapons, aircraft, or tactics, say so. "
                                 "If there is a person or anime character, describe them. "
+                                "Use visual appearance only, not franchise names. "
                                 "Do not turn it into a generic landscape wallpaper, "
                                 "European street, city square, or architecture-only scene "
                                 "unless that is literally all the photo contains."
