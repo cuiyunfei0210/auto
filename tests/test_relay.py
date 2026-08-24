@@ -40,12 +40,30 @@ def test_friendly_message_for_chat_group_cannot_generate_images():
 def test_friendly_message_for_image_generation_tools_error():
     raw = "Tool choice 'image_generation' not found in 'tools' parameter."
     text = friendly_error_message(raw)
-    assert "images/generations" in text
-    assert "images/edits" in text
+    assert "改图" in text
     assert "文生图" in text
     assert "跳过二创" in text
-    assert "军事会变成风景" in text
+    assert "aipixapi" not in text.lower()
     assert friendly_error_message(text) == text
+
+
+def test_friendly_message_collapses_concatenated_copyright_dump():
+    raw = (
+        "/v1/images/edits: The generated image may violate third-party content similarity protection. | "
+        "/v1/images/edits: images[].image_url is required | "
+        "/v1/images/generations(识图文生图): 请上传原图 you want to use as a reference. "
+        "CATEGORY: 动漫 SUBJECT: Zootopia anime character group size 1536x1024 quality medium | "
+        "备用生图 aipixapi: The generated image may violate third-party content similarity protection."
+    )
+    text = friendly_error_message(raw)
+    assert "拦截" in text
+    assert "版权" in text
+    assert "aipixapi" not in text.lower()
+    assert "image_url" not in text
+    assert "请上传" not in text
+    assert "Zootopia" not in text
+    assert "|" not in text
+    assert len(text) < 80
 
 
 def test_friendly_message_for_xbhuiz_image_line():
@@ -368,7 +386,7 @@ def test_remix_does_not_silently_text_to_image_when_vision_fails(tmp_path: Path,
         text = str(exc)
     else:
         raise AssertionError("prompt-only generations must not count as remix")
-    assert "识图" in text or "images/edits" in text
+    assert "识图" in text or "改图" in text
 
 
 def test_remix_falls_back_to_aipix_when_newxxt_tools_path_is_broken(tmp_path: Path, monkeypatch):
@@ -450,8 +468,9 @@ def test_remix_explains_that_panel_text_to_image_is_not_edits(tmp_path: Path, mo
     else:
         raise AssertionError("expected remix to fail")
     assert "文生图" in text
-    assert "images/edits" in text
+    assert "改图" in text
     assert "跳过二创" in text
+    assert "aipixapi" not in text.lower()
 
 
 def test_remix_retries_transient_upstream_errors(tmp_path: Path, monkeypatch):

@@ -35,6 +35,7 @@ def test_windows_packaging_files_exist():
     ui = (root / "src" / "wallpaper_studio" / "web" / "studio.js").read_text(encoding="utf-8")
     assert "function renderLogs" in ui
     assert "function notify(" in ui
+    assert "function hideBackupRelay" in ui
     assert "localStartProblems" in ui
     assert "refreshCounts" in ui
     assert "parseJson" in ui

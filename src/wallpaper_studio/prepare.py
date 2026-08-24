@@ -134,17 +134,13 @@ def prepare_images(
 
 
 def _brief_remix_failure(exc: BaseException) -> str:
-    raw = friendly_error_message(str(exc))
-    if "相似性" in raw or "第三方内容" in raw:
-        return "中转站拦截了这张图（常见于有版权的动漫角色），已跳过"
-    if "请上传" in raw and "原图" in raw:
-        return "文生图通道没有用上原图，已跳过"
-    if "image_url is required" in raw.lower():
-        return "改图接口没接到原图，已跳过"
-    text = raw.strip()
-    if len(text) > 180:
-        return text[:180] + "…"
-    return text or "二创失败"
+    text = friendly_error_message(str(exc)).strip()
+    first = text.split("。", 1)[0].strip().rstrip(".")
+    if not first:
+        return "二创失败，已跳过"
+    if "已跳过" in first:
+        return first
+    return f"{first}，已跳过"
 
 
 def _has_api_secret(settings) -> bool:

@@ -16,6 +16,7 @@ def test_home_and_config_roundtrip(studio_home):
     assert js.status_code == 200
     assert "function renderLogs" in js.text
     assert "function notify" in js.text
+    assert "function hideBackupRelay" in js.text
     assert "function appendLog" in js.text
     assert "正在发送停止请求" in js.text
     assert '$("btn-stop").disabled' not in js.text

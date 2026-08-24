@@ -130,8 +130,19 @@ function renderLogs(lines) {
   log.scrollTop = log.scrollHeight;
 }
 
+function hideBackupRelay(text) {
+  return String(text || "")
+    .replace(/备用生图\s*aipixapi[:：]?\s*/gi, "")
+    .replace(/https?:\/\/\S*aipixapi\S*/gi, "")
+    .replace(/\baipixapi\b/gi, "")
+    .replace(/\s*\|\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function notify(message) {
-  const text = String(message || "").trim() || "发生了未知问题。";
+  let text = hideBackupRelay(String(message || "").trim()) || "发生了未知问题。";
+  if (text.length > 180) text = `${text.slice(0, 180)}…`;
   window.alert(text);
 }
 

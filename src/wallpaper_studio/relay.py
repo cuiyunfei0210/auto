@@ -28,57 +28,61 @@ class ApiError(RuntimeError):
 
 
 def friendly_error_message(raw: str) -> str:
-    """Turn known relay/API failures into an actionable Chinese explanation."""
-    text = (raw or "").strip()
-    if "中转站的 /v1/images" in text or "中转站生图接口" in text or "中转站已关闭批量生图" in text or "中转站没有可用的生图线路" in text:
-        return text
+    """Turn known relay/API failures into one short Chinese hint."""
+    text = _hide_backup_host(raw or "").strip()
+    if not text:
+        return "未知错误"
     lowered = text.lower()
+    if _is_copyright_block(text):
+        return "中转站拦截了这张图（常见于有版权的动漫角色）。"
+    if "请上传" in text and "原图" in text:
+        return "文生图通道没有用上原图。"
+    if "image_url is required" in lowered:
+        return "改图接口没接到原图。"
+    if text.startswith(("中转站", "当前", "这个中转站", "全部二创", "文生图通道", "改图接口")):
+        return text
     if "not supported by any configured account" in lowered or "model_not_found" in lowered:
         return (
             "这个中转站的 Key 组没有该模型。"
             "生图请用 gpt-image-2；写标题请用 gpt-5.4-mini，接口用 https://api.newxxt.top（不要带 /v1）。"
-            "aipixapi 这组 Key 只有 gpt-image-2，不能起名。"
         )
     if "image generation is not enabled" in lowered:
         return (
             "当前这组 Key 是对话组，不能生图。"
-            "「生图 API Key」请填中转站里名称带「生图」的那把，"
-            "「对话 API Key」请填名称带「对话」的那把。"
+            "请改用名称带「生图」的 Key。"
         )
     if "image_generation" in lowered and "tools" in lowered:
         return (
-            "中转站后台「测试账号」走的是 /v1/images/generations（文生图，不带原图），"
-            "能出小狗照片只说明文生图通了，不能说明二创通了。"
-            "壁纸工坊二创要按原图改图，会打 /v1/images/edits；"
-            "这条改图通道仍在报 Tool choice 'image_generation' not found in 'tools'。"
-            "请让中转站给 gpt-image-2 打开「改图 / images/edits」。"
-            "程序会先走改图；改图不通才会先识图再文生图，并且会锁定原图主体。"
-            "不会在没看过原图时直接文生图，否则军事会变成风景。"
-            "这个站的文生图线路会抖动，后台刚测通小狗，程序这边有时仍会被转进坏掉的 tools 通道。"
-            "请再跑一次；还不行就暂时改用「跳过二创」。"
+            "中转站改图通道不可用。"
+            "后台文生图通了不等于能按原图改图。"
+            "请再试一次，或改用「跳过二创」。"
         )
     if "xmapi.site" in lowered and ("生图" in text or "images" in lowered or "线路" in text):
         return (
-            "当前接口走的是 xbhuiz 线路，不能生图。请把接口地址改成 https://api.newxxt.top 或 https://www.aipixapi.art （不要带 /v1），"
-            "生图模型填 gpt-image-2。写标题用 newxxt 的 gpt-5.4-mini。"
+            "当前接口走的是 xbhuiz 线路，不能生图。"
+            "请把接口地址改成 https://api.newxxt.top（不要带 /v1），生图模型填 gpt-image-2。"
         )
     if "temporarily unavailable" in lowered or "upstream service" in lowered or "upstream_error" in lowered:
-        return (
-            "中转站上游生图暂时不可用（Upstream service temporarily unavailable）。"
-            "这是 xmapi 后面的模型线路抖动，不是图片或账号填错。"
-            "程序会自动重试几次；若仍然失败，等一两分钟再跑，或先改用「跳过二创」。"
-        )
+        return "中转站上游生图暂时不可用，请稍后再试，或改用「跳过二创」。"
     if "no available compatible accounts" in lowered or "no available accounts" in lowered:
-        return (
-            "中转站没有可用的生图线路（No available compatible accounts）。"
-            "这是 xmapi 这组 Key 后面没有能跑 gpt-image-2 / 图编辑的账号，不是 CQwall、也不是本地图片坏了。"
-            "请到中转站后台看这组 Key 是否还能生图、额度是否用完；或先改用「跳过二创，直接上传」。"
-        )
+        return "中转站没有可用的生图线路。请检查额度，或改用「跳过二创」。"
     if "batch_image_disabled" in lowered or "batch image" in lowered:
-        return (
-            "中转站已关闭批量生图接口。请改成「跳过二创，直接上传」，或换一组能用的图片模型。"
-        )
-    return text or "未知错误"
+        return "中转站已关闭批量生图。请改用「跳过二创」。"
+    if " | " in text or len(text) > 160:
+        first = text.split(" | ", 1)[0].strip()
+        if first != text:
+            return friendly_error_message(first)
+        return first[:120] + "…"
+    return text
+
+
+def _hide_backup_host(text: str) -> str:
+    cleaned = re.sub(r"(?i)备用生图\s*aipixapi\s*[:：]?\s*", "", text or "")
+    cleaned = re.sub(r"(?i)https?://\S*aipixapi\S*", "", cleaned)
+    cleaned = re.sub(r"(?i)\baipixapi\b", "", cleaned)
+    cleaned = re.sub(r"\s*\|\s*\|\s*", " | ", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip(" |")
 
 
 def normalize_api_base(url: str) -> str:
@@ -151,6 +155,8 @@ def _is_tools_choice_error(text: str) -> bool:
 
 def _is_copyright_block(text: str) -> bool:
     raw = text or ""
+    if "拦截了这张图" in raw or "有版权的动漫" in raw:
+        return True
     lowered = raw.lower()
     tokens = (
         "第三方内容",
@@ -706,7 +712,7 @@ class RelayClient:
                         subject=subject,
                     )
                 except ApiError as exc:
-                    errors.append(f"备用生图 aipixapi: {exc}")
+                    errors.append(f"备用线路: {exc}")
 
         combined = " | ".join(errors) if errors else "未知错误"
         raise ApiError(friendly_error_message(combined))

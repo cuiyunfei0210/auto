@@ -33,6 +33,9 @@ def test_prepare_translates_image_generation_error(studio_home, monkeypatch):
         prepare_images(config, logs.append)
     assert any("跳过 night.png" in line for line in logs)
     assert any("继续下一张" in line for line in logs)
+    skip_line = next(line for line in logs if "跳过 night.png" in line)
+    assert "改图" in skip_line or "跳过二创" in skip_line
+    assert "aipixapi" not in skip_line.lower()
 
 
 def test_prepare_skips_title_api_for_image_models(studio_home, monkeypatch):
@@ -124,7 +127,10 @@ def test_prepare_skips_failed_remix_and_continues(studio_home, monkeypatch):
     assert len(prepared) == 1
     assert prepared[0].path.name.startswith("good")
     assert any("跳过 bad.png" in line for line in logs)
-    assert any("中转站拦截" in line for line in logs)
+    skip_line = next(line for line in logs if "跳过 bad.png" in line)
+    assert "中转站拦截" in skip_line
+    assert "aipixapi" not in skip_line.lower()
+    assert "|" not in skip_line
     assert any("成功 1 张，跳过 1 张" in line for line in logs)
 
 
