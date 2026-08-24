@@ -58,6 +58,7 @@ def prepare_images(
 
     remaining = len(images) if config.mode == "remix_then_upload" else 0
     total = remaining
+    skipped = 0
     if progress:
         progress(remaining, total)
     if config.mode == "remix_then_upload":
@@ -104,10 +105,14 @@ def prepare_images(
             except JobStopped:
                 emit("已停止，不再处理后续图片。")
                 raise
-            except ApiError as exc:
-                raise ApiError(
-                    f"{label} 二创失败。{friendly_error_message(str(exc))}"
-                ) from exc
+            except Exception as exc:  # noqa: BLE001 - skip this file and keep remixing the rest
+                skipped += 1
+                emit(f"跳过 {label}：{_brief_remix_failure(exc)}")
+                emit("已跳过这张，继续下一张")
+                remaining -= 1
+                if progress:
+                    progress(remaining, total)
+                continue
             category = remix_client.last_source_category
             prepared.append(PreparedImage(path=remixed, title=title, category=category))
             width, height = image_dimensions(remixed)
@@ -121,7 +126,25 @@ def prepare_images(
         else:
             prepared.append(PreparedImage(path=image, title=title))
             emit(f"待上传：{image.name}（标题：{title}）")
+    if skipped:
+        emit(f"二创结束：成功 {len(prepared)} 张，跳过 {skipped} 张")
+    if config.mode == "remix_then_upload" and not prepared:
+        raise ApiError("全部二创都失败了，没有可上传的图片。失败原因在上方日志。")
     return prepared
+
+
+def _brief_remix_failure(exc: BaseException) -> str:
+    raw = friendly_error_message(str(exc))
+    if "相似性" in raw or "第三方内容" in raw:
+        return "中转站拦截了这张图（常见于有版权的动漫角色），已跳过"
+    if "请上传" in raw and "原图" in raw:
+        return "文生图通道没有用上原图，已跳过"
+    if "image_url is required" in raw.lower():
+        return "改图接口没接到原图，已跳过"
+    text = raw.strip()
+    if len(text) > 180:
+        return text[:180] + "…"
+    return text or "二创失败"
 
 
 def _has_api_secret(settings) -> bool:

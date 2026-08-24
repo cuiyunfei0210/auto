@@ -28,8 +28,11 @@ def test_prepare_translates_image_generation_error(studio_home, monkeypatch):
 
     monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", boom)
 
-    with pytest.raises(ApiError, match="跳过二创"):
-        prepare_images(config)
+    logs: list[str] = []
+    with pytest.raises(ApiError, match="全部二创都失败了"):
+        prepare_images(config, logs.append)
+    assert any("跳过 night.png" in line for line in logs)
+    assert any("继续下一张" in line for line in logs)
 
 
 def test_prepare_skips_title_api_for_image_models(studio_home, monkeypatch):
@@ -94,6 +97,35 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
     assert ticks[1] == (1, 2)
     assert ticks[2] == (0, 2)
     assert any("不会强制黄昏" in line for line in logs)
+
+
+def test_prepare_skips_failed_remix_and_continues(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="remix_then_upload",
+        api=ApiSettings(api_key="sk-test", filename_prompt=""),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=2, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(studio_home / "source" / "bad.png")
+    make_png(studio_home / "source" / "good.png", (10, 20, 30))
+
+    def fake_remix(self, source, dest_dir, title):
+        if source.name == "bad.png":
+            raise ApiError("生成的图片可能违反了关于与第三方内容相似性的防护限制。")
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{title}.png"
+        path.write_bytes(source.read_bytes())
+        return path
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
+    logs: list[str] = []
+    prepared = prepare_images(config, logs.append)
+    assert len(prepared) == 1
+    assert prepared[0].path.name.startswith("good")
+    assert any("跳过 bad.png" in line for line in logs)
+    assert any("中转站拦截" in line for line in logs)
+    assert any("成功 1 张，跳过 1 张" in line for line in logs)
 
 
 def test_upload_only_keeps_source_images_and_does_not_copy(studio_home):
