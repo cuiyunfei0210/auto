@@ -27,7 +27,7 @@ class ApiError(RuntimeError):
 
 def friendly_error_message(raw: str) -> str:
     """Turn known relay/API failures into one short Chinese hint."""
-    text = (raw or "").strip()
+    text = re.sub(r"/v1/[^\s:]+(?:\([^)]+\))?:\s*", "", raw or "").strip()
     if not text:
         return "未知错误"
     lowered = text.lower()
@@ -37,6 +37,8 @@ def friendly_error_message(raw: str) -> str:
         return "文生图通道没有用上原图。"
     if "image_url is required" in lowered:
         return "改图接口没接到原图。"
+    if "没有可用的生图线路" in text:
+        return "中转站没有可用的生图线路。请检查额度，或改用「跳过二创」。"
     if text.startswith(("中转站", "当前", "这个中转站", "全部二创", "文生图通道", "改图接口")):
         return text
     if "not supported by any configured account" in lowered or "model_not_found" in lowered:

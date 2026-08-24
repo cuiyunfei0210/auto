@@ -83,7 +83,10 @@ def test_friendly_message_for_no_compatible_accounts():
     text = friendly_error_message("/v1/images/edits: No available compatible accounts")
     assert "中转站" in text
     assert "跳过二创" in text
-    assert friendly_error_message(text) == text
+    assert "/v1/" not in text
+    already = "/v1/images/edits: 中转站没有可用的生图线路。请检查额度，或改用「跳过二创」。"
+    assert "/v1/" not in friendly_error_message(already)
+    assert friendly_error_message(already).startswith("中转站没有可用的生图线路")
 
 
 def test_friendly_message_for_batch_image_disabled():
