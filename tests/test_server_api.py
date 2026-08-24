@@ -16,7 +16,6 @@ def test_home_and_config_roundtrip(studio_home):
     assert js.status_code == 200
     assert "function renderLogs" in js.text
     assert "function notify" in js.text
-    assert "function hideBackupRelay" in js.text
     assert "function appendLog" in js.text
     assert "正在发送停止请求" in js.text
     assert '$("btn-stop").disabled' not in js.text
@@ -94,15 +93,12 @@ def test_blank_remix_prompt_is_saved_as_default(studio_home):
     assert client.get("/api/state").json()["config"]["api"]["remix_prompt"] == prompt
 
 
-def test_state_includes_relay_presets(studio_home):
+def test_state_locks_api_host_to_newxxt(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
     state = client.get("/api/state").json()
-    presets = state["relay_presets"]
-    assert presets["newxxt"]["base_url"] == "https://api.newxxt.top"
-    assert presets["aipixapi"]["base_url"] == "https://www.aipixapi.art"
-    assert presets["aipixapi"]["filename_base_url"] == "https://api.newxxt.top"
-    assert presets["xmapi"]["filename_model"] == "gpt-5.4-mini"
+    assert "relay_presets" not in state
+    assert state["config"]["api"]["base_url"] == "https://api.newxxt.top"
 
 
 def test_default_state_includes_cqwall_and_newxxt(studio_home):

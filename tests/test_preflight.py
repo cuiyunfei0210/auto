@@ -20,7 +20,7 @@ def test_start_problems_reports_remix_without_credentials(studio_home):
     make_png(studio_home / "source" / "one.png")
     config = AppConfig(
         mode="remix_then_upload",
-        api=ApiSettings(base_url="https://xmapi.site", api_key="", username="", password=""),
+        api=ApiSettings(base_url="https://api.newxxt.top", api_key="", username="", password=""),
         accounts=[Account(username="demo1", password="123123")],
         paths=PathSettings(source_dir=str(studio_home / "source")),
     )

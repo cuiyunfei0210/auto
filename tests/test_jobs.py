@@ -197,31 +197,17 @@ def test_apply_defaults_switches_xbhuiz_to_newxxt():
     assert updated.api.api_key.startswith("sk-")
 
 
-def test_apply_defaults_migrates_baked_xmapi_to_newxxt():
-    from wallpaper_studio.models import XMAP_API_KEY
+def test_apply_defaults_migrates_other_hosts_to_newxxt():
+    from wallpaper_studio.models import NEWXXT_API_KEY
 
-    config = AppConfig.model_validate({"api": {"base_url": "https://xmapi.site", "api_key": XMAP_API_KEY}})
+    config = AppConfig.model_validate({"api": {"base_url": "https://xmapi.site", "api_key": "sk-custom-other"}})
     updated = apply_builtin_defaults(config)
     assert updated.api.base_url == "https://api.newxxt.top"
-    assert updated.api.api_key.startswith("sk-")
-
-
-def test_apply_defaults_keeps_custom_xmapi_and_adds_newxxt_titles():
-    config = AppConfig.model_validate(
-        {"api": {"base_url": "https://xmapi.site", "api_key": "sk-custom-xmapi"}}
-    )
-    updated = apply_builtin_defaults(config)
-    assert updated.api.base_url == "https://api.newxxt.top"
-    assert updated.api.api_key == "sk-custom-xmapi"
+    assert updated.api.api_key == NEWXXT_API_KEY
     assert updated.api.filename_model == "gpt-5.4-mini"
 
 
-def test_match_relay_preset_by_host():
-    from wallpaper_studio.models import AIPIX_API_BASE, ApiSettings, match_relay_preset
-
-    assert match_relay_preset(ApiSettings(base_url=AIPIX_API_BASE)) == "aipixapi"
-    assert match_relay_preset(ApiSettings(base_url="https://xmapi.site/v1")) == "xmapi"
-    assert match_relay_preset(ApiSettings()) == "newxxt"
+def test_effective_remix_prompt_keeps_user_text():
     settings = AppConfig.model_validate({"api": {"remix_prompt": "  "}}).api
     assert settings.remix_prompt == DEFAULT_REMIX_PROMPT
     assert "禁止原样" in settings.remix_prompt

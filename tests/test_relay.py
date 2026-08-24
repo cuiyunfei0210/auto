@@ -66,10 +66,9 @@ def test_friendly_message_collapses_concatenated_copyright_dump():
     assert len(text) < 80
 
 
-def test_friendly_message_for_xbhuiz_image_line():
+def test_friendly_message_for_other_relay_host():
     text = friendly_error_message("该线路无法完成生图请求,请使用 https://xmapi.site/")
     assert "newxxt.top" in text
-    assert "xbhuiz" in text
     assert "gpt-image-2" in text
 
 
@@ -389,23 +388,13 @@ def test_remix_does_not_silently_text_to_image_when_vision_fails(tmp_path: Path,
     assert "识图" in text or "改图" in text
 
 
-def test_remix_falls_back_to_aipix_when_newxxt_tools_path_is_broken(tmp_path: Path, monkeypatch):
+def test_remix_does_not_call_another_relay_when_newxxt_fails(tmp_path: Path, monkeypatch):
     source = make_png(tmp_path / "night.png")
-    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
     seen: list[str] = []
     monkeypatch.setattr("wallpaper_studio.relay.wait_or_stop", lambda _seconds: None)
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(str(request.url))
-        if "aipixapi" in request.url.host and request.url.path.endswith("/v1/images/edits"):
-            if request.headers.get("content-type", "").startswith("multipart/"):
-                return httpx.Response(
-                    400,
-                    json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
-                )
-            body = json.loads(request.content)
-            if "images" in body:
-                return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
         return httpx.Response(
             400,
             json={"error": {"message": "Tool choice 'image_generation' not found in 'tools' parameter."}},
@@ -415,9 +404,14 @@ def test_remix_falls_back_to_aipix_when_newxxt_tools_path_is_broken(tmp_path: Pa
         ApiSettings(base_url="https://api.newxxt.top", api_key="sk-newxxt", image_size="1024x1024"),
         transport=httpx.MockTransport(handler),
     )
-    dest = client.remix_image(source, tmp_path / "out", "星河")
-    assert dest.exists()
-    assert any("aipixapi" in url for url in seen)
+    try:
+        client.remix_image(source, tmp_path / "out", "星河")
+    except ApiError as exc:
+        text = str(exc)
+    else:
+        raise AssertionError("expected remix to fail without a second relay")
+    assert all("aipixapi" not in url and "xmapi" not in url for url in seen)
+    assert "改图" in text or "跳过二创" in text
 
 
 def test_remix_falls_back_to_multipart_edits(tmp_path: Path):
@@ -693,11 +687,11 @@ def test_remix_upscales_1920x1080(tmp_path: Path):
         assert image.size == (1920, 1080)
 
 
-def test_title_api_settings_can_use_a_second_relay():
+def test_title_api_settings_can_use_a_second_key():
     from wallpaper_studio.models import ApiSettings, title_api_settings
 
     settings = ApiSettings(
-        base_url="https://www.aipixapi.art",
+        base_url="https://api.newxxt.top",
         api_key="sk-image",
         filename_model="gpt-5.4-mini",
         filename_base_url="https://api.newxxt.top",
@@ -725,7 +719,7 @@ def test_generate_title_uses_filename_relay_host(tmp_path: Path):
 
     settings = ApiSettings(
         api_key="sk-image",
-        base_url="https://www.aipixapi.art",
+        base_url="https://api.newxxt.top",
         filename_model="gpt-5.4-mini",
         filename_base_url="https://api.newxxt.top",
         filename_api_key="sk-chat",

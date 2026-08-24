@@ -10,8 +10,6 @@ import httpx
 from wallpaper_studio.control import JobStopped, pop_http, push_http, stop_requested, wait_or_stop
 from wallpaper_studio.files import fit_image_bytes, sanitize_filename, unique_path
 from wallpaper_studio.models import (
-    AIPIX_API_BASE,
-    AIPIX_API_KEY,
     ApiSettings,
     DEFAULT_API_BASE,
     effective_remix_prompt,
@@ -29,7 +27,7 @@ class ApiError(RuntimeError):
 
 def friendly_error_message(raw: str) -> str:
     """Turn known relay/API failures into one short Chinese hint."""
-    text = _hide_backup_host(raw or "").strip()
+    text = (raw or "").strip()
     if not text:
         return "未知错误"
     lowered = text.lower()
@@ -57,11 +55,8 @@ def friendly_error_message(raw: str) -> str:
             "后台文生图通了不等于能按原图改图。"
             "请再试一次，或改用「跳过二创」。"
         )
-    if "xmapi.site" in lowered and ("生图" in text or "images" in lowered or "线路" in text):
-        return (
-            "当前接口走的是 xbhuiz 线路，不能生图。"
-            "请把接口地址改成 https://api.newxxt.top（不要带 /v1），生图模型填 gpt-image-2。"
-        )
+    if "xmapi.site" in lowered or "xbhuiz" in lowered or "aipixapi" in lowered:
+        return "请把接口改成 https://api.newxxt.top（不要带 /v1），生图模型填 gpt-image-2。"
     if "temporarily unavailable" in lowered or "upstream service" in lowered or "upstream_error" in lowered:
         return "中转站上游生图暂时不可用，请稍后再试，或改用「跳过二创」。"
     if "no available compatible accounts" in lowered or "no available accounts" in lowered:
@@ -74,15 +69,6 @@ def friendly_error_message(raw: str) -> str:
             return friendly_error_message(first)
         return first[:120] + "…"
     return text
-
-
-def _hide_backup_host(text: str) -> str:
-    cleaned = re.sub(r"(?i)备用生图\s*aipixapi\s*[:：]?\s*", "", text or "")
-    cleaned = re.sub(r"(?i)https?://\S*aipixapi\S*", "", cleaned)
-    cleaned = re.sub(r"(?i)\baipixapi\b", "", cleaned)
-    cleaned = re.sub(r"\s*\|\s*\|\s*", " | ", cleaned)
-    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
-    return cleaned.strip(" |")
 
 
 def normalize_api_base(url: str) -> str:
@@ -596,7 +582,6 @@ class RelayClient:
         dest_dir: Path,
         title: str,
         *,
-        allow_fallback: bool = True,
         category: str = "",
         subject: str = "",
     ) -> Path:
@@ -699,34 +684,8 @@ class RelayClient:
             except ApiError as exc:
                 errors.append(f"/v1/images/generations(识图文生图): {exc}")
 
-        if allow_fallback:
-            fallback = self._fallback_image_client()
-            if fallback is not None:
-                try:
-                    return fallback.remix_image(
-                        source,
-                        dest_dir,
-                        title,
-                        allow_fallback=False,
-                        category=category,
-                        subject=subject,
-                    )
-                except ApiError as exc:
-                    errors.append(f"备用线路: {exc}")
-
         combined = " | ".join(errors) if errors else "未知错误"
         raise ApiError(friendly_error_message(combined))
-
-    def _fallback_image_client(self) -> RelayClient | None:
-        if normalize_api_base(self.settings.base_url) == normalize_api_base(AIPIX_API_BASE):
-            return None
-        return RelayClient(
-            self.settings.model_copy(
-                update={"base_url": AIPIX_API_BASE, "api_key": AIPIX_API_KEY}
-            ),
-            timeout=self.timeout,
-            transport=self.transport,
-        )
 
     def _remix_requests(
         self, data_url: str, mime: str, category: str = ""

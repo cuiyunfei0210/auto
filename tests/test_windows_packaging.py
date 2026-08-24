@@ -35,7 +35,6 @@ def test_windows_packaging_files_exist():
     ui = (root / "src" / "wallpaper_studio" / "web" / "studio.js").read_text(encoding="utf-8")
     assert "function renderLogs" in ui
     assert "function notify(" in ui
-    assert "function hideBackupRelay" in ui
     assert "localStartProblems" in ui
     assert "refreshCounts" in ui
     assert "parseJson" in ui
@@ -44,7 +43,7 @@ def test_windows_packaging_files_exist():
     assert "/api/shutdown" in ui
     assert "btn-quit" in ui
     assert "FIXED_API_BASE" in ui
-    assert "filename_base_url" in ui
+    assert "filename_api_key" in ui
     assert "relay_preset" not in ui
     html = (root / "src" / "wallpaper_studio" / "web" / "index.html").read_text(encoding="utf-8")
     assert "待二创" in html

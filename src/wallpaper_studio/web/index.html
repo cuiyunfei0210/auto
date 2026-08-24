@@ -166,6 +166,7 @@
       <section class="pane hidden" id="pane-api">
         <article class="card">
           <h2>中转站 API</h2>
+          <p class="hint">中转站固定 https://api.newxxt.top，生图用 gpt-image-2，写标题用 gpt-5.4-mini。</p>
           <label>中转站邮箱<input id="api_username"></label>
           <label>中转站密码<input id="api_password" type="password"></label>
           <label>生图 API Key<input id="api_key" type="password" placeholder="sk-…"></label>
@@ -181,7 +182,6 @@
             <option value="gpt-5.4">gpt-5.4</option>
             <option value="gpt-5.2">gpt-5.2</option>
           </datalist>
-          <label>写标题接口（可留空）<input id="filename_base_url" placeholder="https://api.newxxt.top"></label>
           <label>对话 API Key<input id="filename_api_key" type="password" placeholder="跟生图不是同一组 Key 时再填"></label>
           <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="按你的二创要求写，例如正午冷色调、更锐利。原图分类会保持不变"></textarea></label>
           <p class="hint">会按你填的二创提示词生成。无论是按原图改图，还是先识图再文生图，原图分类都不变：军事还是军事，动漫还是动漫，不会改成风景。上传时也用识别到的原图分类，而不是一律填风景。</p>
@@ -200,6 +200,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260822c" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260824a" charset="utf-8"></script>
 </body>
 </html>

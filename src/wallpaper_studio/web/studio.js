@@ -16,7 +16,7 @@ const siteFields = [
 const FIXED_API_BASE = "https://api.newxxt.top";
 const apiFields = [
   "api_key", "remix_chat_model", "remix_model", "filename_model",
-  "filename_base_url", "filename_api_key", "remix_prompt", "filename_prompt", "image_size",
+  "filename_api_key", "remix_prompt", "filename_prompt", "image_size",
 ];
 
 function $(id) { return document.getElementById(id); }
@@ -57,6 +57,7 @@ function collectConfig() {
   const api = {};
   for (const key of apiFields) api[key] = $(key).value;
   api.base_url = FIXED_API_BASE;
+  api.filename_base_url = FIXED_API_BASE;
   api.username = $("api_username") ? $("api_username").value.trim() : "";
   api.password = $("api_password") ? $("api_password").value : "";
 
@@ -130,18 +131,8 @@ function renderLogs(lines) {
   log.scrollTop = log.scrollHeight;
 }
 
-function hideBackupRelay(text) {
-  return String(text || "")
-    .replace(/备用生图\s*aipixapi[:：]?\s*/gi, "")
-    .replace(/https?:\/\/\S*aipixapi\S*/gi, "")
-    .replace(/\baipixapi\b/gi, "")
-    .replace(/\s*\|\s*/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
 function notify(message) {
-  let text = hideBackupRelay(String(message || "").trim()) || "发生了未知问题。";
+  let text = String(message || "").trim() || "发生了未知问题。";
   if (text.length > 180) text = `${text.slice(0, 180)}…`;
   window.alert(text);
 }

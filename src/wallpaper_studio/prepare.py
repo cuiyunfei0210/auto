@@ -52,8 +52,7 @@ def prepare_images(
         emit(
             "根据图片写标题需要对话/识图模型。"
             f"当前填的是 {config.api.filename_model or '空'}。"
-            "gpt-image-2 不能起名。newxxt 请填 gpt-5.4-mini；"
-            "aipixapi / xmapi 这组 Key 只有生图，请把「写标题接口」改成 https://api.newxxt.top。"
+            "gpt-image-2 不能起名，请把文件名模型改成 gpt-5.4-mini。"
         )
 
     remaining = len(images) if config.mode == "remix_then_upload" else 0
