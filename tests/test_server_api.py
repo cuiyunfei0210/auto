@@ -12,10 +12,14 @@ def test_home_and_config_roundtrip(studio_home):
     home = client.get("/")
     assert home.status_code == 200
     assert "壁纸工坊" in home.text
+    assert 'id="upload_category"' in home.text
+    assert "本轮分类" in home.text
     js = client.get("/static/studio.js")
     assert js.status_code == 200
     assert "function renderLogs" in js.text
     assert "function notify" in js.text
+    assert "function canonicalCategory" in js.text
+    assert "upload_category" in js.text
     assert "function appendLog" in js.text
     assert "正在发送停止请求" in js.text
     assert '$("btn-stop").disabled' not in js.text
@@ -28,12 +32,14 @@ def test_home_and_config_roundtrip(studio_home):
     assert state.status_code == 200
     payload = state.json()["config"]
     payload["mode"] = "upload_only"
+    payload["upload_category"] = "动漫"
     payload["accounts"] = [
         {"username": "demo1", "password": "123123", "upload_count": 2, "interval_seconds": 1}
     ]
     saved = client.post("/api/config", json=payload)
     assert saved.status_code == 200
     assert saved.json()["config"]["accounts"][0]["username"] == "demo1"
+    assert saved.json()["config"]["upload_category"] == "动漫"
 
 
 def test_config_clears_image_size_limits(studio_home):
@@ -259,6 +265,7 @@ def test_stop_cancels_a_running_prepare_loop(studio_home, monkeypatch):
     save_config(
         AppConfig(
             mode="upload_only",
+            upload_category="风景",
             api=ApiSettings(filename_prompt=""),
             paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
             accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],

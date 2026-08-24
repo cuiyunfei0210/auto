@@ -632,6 +632,33 @@ def test_user_copy_prompt_is_kept_and_category_is_locked():
     assert "must follow" in prompt
 
 
+def test_remix_locked_category_ignores_vision_label(tmp_path: Path):
+    source = make_png(tmp_path / "night.png")
+    image_b64 = base64.b64encode(source.read_bytes()).decode("ascii")
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path.endswith("/v1/chat/completions"):
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "CATEGORY: 风景\nSUBJECT: a lake"}}]},
+            )
+        body = json.loads(request.content)
+        assert "Source category is 军事" in body["prompt"]
+        assert "Keep the source photo's CQwall category" not in body["prompt"]
+        return httpx.Response(200, json={"data": [{"b64_json": image_b64}]})
+
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+    )
+    dest = client.remix_image(source, tmp_path / "out", "星河", category="军事")
+    assert dest.exists()
+    assert client.last_source_category == "军事"
+    assert all("/v1/chat/completions" not in path for path in seen)
+
+
 def test_sunset_prompt_skips_anti_dusk_guard():
     prompt = build_remix_prompt("Keep the dolphin, make a dramatic sunset over the ocean.")
     assert "dramatic sunset" in prompt

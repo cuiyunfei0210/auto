@@ -15,7 +15,7 @@ from wallpaper_studio.models import (
     effective_remix_prompt,
     title_api_settings,
 )
-from wallpaper_studio.sites import CQWALL_CATEGORY_LABELS, parse_category_reply
+from wallpaper_studio.sites import CQWALL_CATEGORY_LABELS, locked_upload_category, parse_category_reply
 
 _MD_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 _DATA_URL = re.compile(r"^data:image/([^;]+);base64,(.+)$", re.DOTALL | re.IGNORECASE)
@@ -594,12 +594,15 @@ class RelayClient:
         data_url = f"data:{mime};base64,{encoded}"
         errors: list[str] = []
         _api_size, target = resolve_remix_size(self.settings.image_size)
-        if not category.strip():
+        locked = locked_upload_category(category)
+        if locked:
+            category = locked
+        elif not category.strip():
             try:
                 category, subject = self.classify_source(source)
             except ApiError:
                 pass
-        self.last_source_category = (category or "").strip()
+        self.last_source_category = locked or (category or "").strip()
         prompt = build_remix_prompt(self.settings.remix_prompt, category=category)
         image_model = self.settings.remix_model.strip() or "gpt-image-2"
         size = official_image_size(self.settings.image_size)

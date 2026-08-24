@@ -49,6 +49,24 @@
               <input type="radio" name="mode" value="remix_then_upload">
               <span>先调用中转站二创，再上传结果文件夹</span>
             </label>
+            <label>本轮分类
+              <select id="upload_category">
+                <option value="">请选择本轮分类</option>
+                <option value="动物">动物</option>
+                <option value="军事">军事</option>
+                <option value="汽车">汽车</option>
+                <option value="电影">电影</option>
+                <option value="时代">时代</option>
+                <option value="明星">明星</option>
+                <option value="宇宙">宇宙</option>
+                <option value="美女">美女</option>
+                <option value="风景">风景</option>
+                <option value="动漫">动漫</option>
+                <option value="游戏">游戏</option>
+                <option value="都市">都市</option>
+              </select>
+            </label>
+            <p class="hint">开始前必须选分类。选了动漫，二创生成的图和上传 CQwall 都按动漫，不会再用识图结果改分类。</p>
             <div class="stats">
               <div><em id="source-count">0</em><span>源图</span></div>
               <div><em id="remix-count">0</em><span>待二创</span></div>
@@ -63,7 +81,7 @@
             <p class="hint" id="path-hint"></p>
             <p class="hint" id="count-hint"></p>
             <p class="hint error" id="source-hint" hidden></p>
-            <p class="hint">点「开始任务」会先重新扫描源目录。缺账号、缺图片、二创没填 Key 都会弹窗说明。gpt-image-2 生图大约要几十秒，请看右侧日志。「待二创」是还没二创完的源图张数，每完成一张减 1。点「停止」会立刻出现在日志里；如果当前这张图正在请求中转站，会等这次请求结束再停，不会再做下一张。关窗口或点「退出程序」即可退出。</p>
+            <p class="hint">点「开始任务」会先重新扫描源目录。没选分类、缺账号、缺图片、二创没填 Key 都会弹窗说明。gpt-image-2 生图大约要几十秒，请看右侧日志。「待二创」是还没二创完的源图张数，每完成一张减 1。点「停止」会立刻出现在日志里；如果当前这张图正在请求中转站，会等这次请求结束再停，不会再做下一张。关窗口或点「退出程序」即可退出。</p>
           </article>
           <article class="card log-card">
             <h2>运行日志</h2>
@@ -150,7 +168,7 @@
             <label>文件上传完成文字<input id="file_uploaded_text"></label>
             <label>标题输入框选择器<input id="title_selector"></label>
             <label>分类选择器<input id="category_selector"></label>
-            <label>默认分类（风景=9，也可填中文名）<input id="category_value"></label>
+            <label>网页表单兜底分类（任务页没选中时才用）<input id="category_value"></label>
             <label>协议勾选选择器<input id="agree_selector"></label>
             <label>发布按钮选择器<input id="submit_selector"></label>
             <label>成功提示文字<input id="success_text"></label>
@@ -183,8 +201,8 @@
             <option value="gpt-5.2">gpt-5.2</option>
           </datalist>
           <label>对话 API Key<input id="filename_api_key" type="password" placeholder="跟生图不是同一组 Key 时再填"></label>
-          <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="按你的二创要求写，例如正午冷色调、更锐利。原图分类会保持不变"></textarea></label>
-          <p class="hint">会按你填的二创提示词生成。无论是按原图改图，还是先识图再文生图，原图分类都不变：军事还是军事，动漫还是动漫，不会改成风景。上传时也用识别到的原图分类，而不是一律填风景。</p>
+          <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="按你的二创要求写，例如正午冷色调、更锐利。分类以任务页选择为准"></textarea></label>
+          <p class="hint">会按你填的二创提示词生成。分类以任务页本轮选择为准：选了军事就是军事，选了动漫就是动漫，识图不会改分类。上传 CQwall 也用这个分类。</p>
           <label>文件名提示词（根据图片生成上传标题）<textarea id="filename_prompt" rows="3" placeholder="Write a short English wallpaper title, max 18 characters"></textarea></label>
           <label>出图尺寸<input id="image_size" list="image-size-options" placeholder="1920x1080"></label>
           <datalist id="image-size-options">
@@ -200,6 +218,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260824a" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260824b" charset="utf-8"></script>
 </body>
 </html>

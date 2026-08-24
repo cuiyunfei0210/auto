@@ -12,6 +12,7 @@ from wallpaper_studio.files import (
 )
 from wallpaper_studio.models import AppConfig, PreparedImage, title_api_settings
 from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message
+from wallpaper_studio.sites import locked_upload_category
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
@@ -58,13 +59,16 @@ def prepare_images(
     remaining = len(images) if config.mode == "remix_then_upload" else 0
     total = remaining
     skipped = 0
+    chosen = locked_upload_category(config.upload_category)
     if progress:
         progress(remaining, total)
+    if chosen:
+        emit(f"本轮分类固定为「{chosen}」。二创和上传都按这个分类，识图结果不会覆盖。")
     if config.mode == "remix_then_upload":
         removed = clear_images_in_dir(dest)
         if removed:
             emit(f"已清空输出目录里上次留下的 {removed} 张图，本轮二创数量会和源图一致。")
-        emit("二创会按你填的提示词改图，但原图分类不变：军事还是军事，动漫还是动漫，不会改成风景。不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
+        emit("二创会按你填的提示词改图，并锁定任务页选的分类。不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
 
     def cancelled() -> bool:
         if stop_check and stop_check():
@@ -100,7 +104,7 @@ def prepare_images(
             assert remix_client is not None
             emit(f"正在二创 {label} …")
             try:
-                remixed = remix_client.remix_image(image, dest, title)
+                remixed = remix_client.remix_image(image, dest, title, category=chosen)
             except JobStopped:
                 emit("已停止，不再处理后续图片。")
                 raise
@@ -112,7 +116,7 @@ def prepare_images(
                 if progress:
                     progress(remaining, total)
                 continue
-            category = remix_client.last_source_category
+            category = chosen or remix_client.last_source_category
             prepared.append(PreparedImage(path=remixed, title=title, category=category))
             width, height = image_dimensions(remixed)
             if category:
@@ -123,8 +127,11 @@ def prepare_images(
             if progress:
                 progress(remaining, total)
         else:
-            prepared.append(PreparedImage(path=image, title=title))
-            emit(f"待上传：{image.name}（标题：{title}）")
+            prepared.append(PreparedImage(path=image, title=title, category=chosen))
+            if chosen:
+                emit(f"待上传：{image.name}（标题：{title}，分类：{chosen}）")
+            else:
+                emit(f"待上传：{image.name}（标题：{title}）")
     if skipped:
         emit(f"二创结束：成功 {len(prepared)} 张，跳过 {skipped} 张")
     if config.mode == "remix_then_upload" and not prepared:

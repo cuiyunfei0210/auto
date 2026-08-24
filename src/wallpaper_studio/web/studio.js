@@ -1,5 +1,5 @@
 const headings = {
-  job: ["任务", "先准备图片，再按账号队列模拟网页上传。"],
+  job: ["任务", "先选本轮分类，再准备图片，按账号队列模拟网页上传。"],
   folders: ["文件夹", "源图和一个单独的输出目录。"],
   accounts: ["账号", "一个账号传完再换下一个；每个账号尽量使用不同出口。"],
   site: ["网页上传", "上传时用内置浏览器填登录表和上传表，不调用壁纸站后台接口。"],
@@ -12,6 +12,26 @@ const siteFields = [
   "file_input_selector", "file_uploaded_text", "title_selector",
   "category_selector", "category_value", "agree_selector", "submit_selector", "success_text",
 ];
+
+const CATEGORY_OPTIONS = [
+  ["1", "动物"], ["2", "军事"], ["3", "汽车"], ["4", "电影"], ["5", "时代"], ["6", "明星"],
+  ["7", "宇宙"], ["8", "美女"], ["9", "风景"], ["10", "动漫"], ["17", "游戏"], ["18", "都市"],
+];
+
+function canonicalCategory(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  for (const [id, name] of CATEGORY_OPTIONS) {
+    if (raw === id || raw === name) return name;
+  }
+  const lowered = raw.toLowerCase();
+  const aliases = {
+    animals: "动物", military: "军事", cars: "汽车", movie: "电影", era: "时代",
+    celebrity: "明星", universe: "宇宙", girl: "美女", scenery: "风景", anime: "动漫",
+    games: "游戏", urban: "都市",
+  };
+  return aliases[lowered] || "";
+}
 
 const FIXED_API_BASE = "https://api.newxxt.top";
 const apiFields = [
@@ -63,6 +83,7 @@ function collectConfig() {
 
   return {
     mode: document.querySelector("input[name=mode]:checked").value,
+    upload_category: canonicalCategory($("upload_category") ? $("upload_category").value : ""),
     api,
     paths: {
       source_dir: $("source_dir").value.trim(),
@@ -81,6 +102,7 @@ function collectConfig() {
 
 function applyConfig(config) {
   document.querySelector(`input[name=mode][value="${config.mode}"]`).checked = true;
+  if ($("upload_category")) $("upload_category").value = canonicalCategory(config.upload_category || "");
   $("source_dir").value = config.paths.source_dir || "";
   $("output_dir").value = config.paths.output_dir || "";
   for (const key of siteFields) $(key).value = config.site[key] == null ? "" : config.site[key];
@@ -141,6 +163,9 @@ function localStartProblems(cfg) {
   const problems = [];
   if (!cfg.accounts.length) {
     problems.push("还没有账号。请到「账号」页填写 CQwall 邮箱和密码。");
+  }
+  if (!canonicalCategory(cfg.upload_category)) {
+    problems.push("请先在任务页选择本轮分类。选了什么分类，二创和上传就按什么分类。");
   }
   const sourceCount = Number(lastState.source_count != null ? lastState.source_count : ($("source-count").textContent || 0));
   if (!Number.isFinite(sourceCount) || sourceCount <= 0) {

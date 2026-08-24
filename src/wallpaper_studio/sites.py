@@ -62,6 +62,13 @@ def category_label(value: str) -> str:
     return (value or "").strip()
 
 
+def locked_upload_category(value: str) -> str:
+    """Return a known CQwall Chinese label, or empty if the pick is missing/unknown."""
+    label = category_label(value)
+    known = {name for _cid, name in CQWALL_CATEGORY_LABELS}
+    return label if label in known else ""
+
+
 _CATEGORY_HINTS = (
     ("军事", ("soldier", "military", "weapon", "tactical", "helicopter", "rifle", "士兵", "军事", "战机")),
     ("动漫", ("anime", "动漫")),

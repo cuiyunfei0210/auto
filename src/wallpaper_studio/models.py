@@ -277,6 +277,7 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
 
 class AppConfig(BaseModel):
     mode: str = "upload_only"  # upload_only | remix_then_upload
+    upload_category: str = ""  # CQwall Chinese label chosen on the task pane
     api: ApiSettings = Field(default_factory=ApiSettings)
     paths: PathSettings = Field(default_factory=PathSettings)
     site: SiteProfile = Field(default_factory=default_site_profile)

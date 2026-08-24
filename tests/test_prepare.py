@@ -23,7 +23,7 @@ def test_prepare_translates_image_generation_error(studio_home, monkeypatch):
         lambda self, stem, image=None: "静谧星河夜语",
     )
 
-    def boom(self, source, dest_dir, title):
+    def boom(self, source, dest_dir, title, **kwargs):
         raise ApiError("Tool choice 'image_generation' not found in 'tools' parameter.")
 
     monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", boom)
@@ -86,7 +86,7 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
     make_png(studio_home / "source" / "two.png", (10, 20, 30))
     ticks: list[tuple[int, int]] = []
 
-    def fake_remix(self, source, dest_dir, title):
+    def fake_remix(self, source, dest_dir, title, **kwargs):
         dest_dir.mkdir(parents=True, exist_ok=True)
         path = dest_dir / f"{title}.png"
         path.write_bytes(source.read_bytes())
@@ -113,7 +113,7 @@ def test_prepare_skips_failed_remix_and_continues(studio_home, monkeypatch):
     make_png(studio_home / "source" / "bad.png")
     make_png(studio_home / "source" / "good.png", (10, 20, 30))
 
-    def fake_remix(self, source, dest_dir, title):
+    def fake_remix(self, source, dest_dir, title, **kwargs):
         if source.name == "bad.png":
             raise ApiError("生成的图片可能违反了关于与第三方内容相似性的防护限制。")
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -167,7 +167,7 @@ def test_remix_clears_leftover_output_so_count_matches_source(studio_home, monke
     leftover.write_bytes(b"old")
     (dest / "stale.png").write_bytes(b"old")
 
-    def fake_remix(self, source, dest_dir, title):
+    def fake_remix(self, source, dest_dir, title, **kwargs):
         dest_dir.mkdir(parents=True, exist_ok=True)
         path = dest_dir / f"{title}.png"
         path.write_bytes(source.read_bytes())
@@ -197,7 +197,7 @@ def test_prepare_skips_duplicate_nested_source(studio_home, monkeypatch):
     (nested / "ce8257.jpg").write_bytes(original.read_bytes())
     seen: list[str] = []
 
-    def fake_remix(self, source, dest_dir, title):
+    def fake_remix(self, source, dest_dir, title, **kwargs):
         seen.append(source.name)
         dest_dir.mkdir(parents=True, exist_ok=True)
         path = dest_dir / f"{title}.png"
@@ -248,7 +248,7 @@ def test_prepare_stops_before_the_next_image(studio_home, monkeypatch):
     make_png(studio_home / "source" / "two.png", (10, 20, 30))
     seen: list[str] = []
 
-    def fake_remix(self, source, dest_dir, title):
+    def fake_remix(self, source, dest_dir, title, **kwargs):
         seen.append(source.name)
         dest_dir.mkdir(parents=True, exist_ok=True)
         path = dest_dir / f"{title}.png"
@@ -265,3 +265,48 @@ def test_prepare_stops_before_the_next_image(studio_home, monkeypatch):
         prepare_images(config, logs.append, stop_check=stop_after_first)
     assert seen == ["one.png"] or len(seen) == 1
     assert any("已停止" in line for line in logs)
+
+
+def test_prepare_remix_locks_chosen_category(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="remix_then_upload",
+        upload_category="军事",
+        api=ApiSettings(api_key="sk-test", filename_prompt=""),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(source_dir(config) / "soldier.png")
+    seen: dict = {}
+
+    def fake_remix(self, source, dest_dir, title, **kwargs):
+        seen["category"] = kwargs.get("category")
+        self.last_source_category = "风景"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{title}.png"
+        path.write_bytes(source.read_bytes())
+        return path
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
+    logs: list[str] = []
+    prepared = prepare_images(config, logs.append)
+    assert seen["category"] == "军事"
+    assert prepared[0].category == "军事"
+    assert any("本轮分类固定为「军事」" in line for line in logs)
+    assert any("分类：军事" in line for line in logs)
+
+
+def test_prepare_upload_only_uses_chosen_category(studio_home):
+    config = AppConfig(
+        mode="upload_only",
+        upload_category="动漫",
+        api=ApiSettings(filename_prompt=""),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(source_dir(config) / "hero.png")
+    logs: list[str] = []
+    prepared = prepare_images(config, logs.append)
+    assert prepared[0].category == "动漫"
+    assert any("分类：动漫" in line for line in logs)

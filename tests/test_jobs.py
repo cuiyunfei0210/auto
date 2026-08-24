@@ -93,6 +93,24 @@ async def test_upload_uses_detected_source_category(tmp_path: Path):
     assert uploader.events[1] == ("upload", "demo1", "soldier.png", "soldier", "军事")
 
 
+async def test_job_uploads_chosen_task_category(studio_home):
+    config = AppConfig(
+        mode="upload_only",
+        upload_category="动漫",
+        api=ApiSettings(filename_prompt=""),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        site=SiteProfile(category_value="风景"),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(source_dir(config) / "hero.png")
+    uploader = RecordingUploader()
+    result = await run_job(config, uploader=uploader)
+    assert result["uploaded"] == 1
+    uploads = [event for event in uploader.events if event[0] == "upload"]
+    assert uploads[0][4] == "动漫"
+
+
 async def test_job_skips_failed_image_and_continues(studio_home):
     config = AppConfig(
         mode="upload_only",

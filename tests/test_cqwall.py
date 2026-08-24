@@ -30,6 +30,16 @@ def test_map_category_accepts_chinese_and_ids():
     assert map_category("美女") == "8"
 
 
+def test_locked_upload_category_accepts_id_and_name():
+    from wallpaper_studio.sites import locked_upload_category
+
+    assert locked_upload_category("动漫") == "动漫"
+    assert locked_upload_category("10") == "动漫"
+    assert locked_upload_category("anime") == "动漫"
+    assert locked_upload_category("") == ""
+    assert locked_upload_category("不是分类") == ""
+
+
 def test_cqwall_category_hint_lists_all_live_ids():
     hint = cqwall_category_hint()
     assert hint == (
@@ -40,6 +50,11 @@ def test_cqwall_category_hint_lists_all_live_ids():
         encoding="utf-8"
     )
     assert hint in html
+    assert 'id="upload_category"' in html
+    from wallpaper_studio.sites import CQWALL_CATEGORY_LABELS
+
+    for _cid, name in CQWALL_CATEGORY_LABELS:
+        assert f'value="{name}"' in html
 
 
 def test_category_choices_include_id_and_names():
