@@ -37,9 +37,12 @@ def friendly_error_message(raw: str) -> str:
         return "文生图通道没有用上原图。"
     if "image_url is required" in lowered:
         return "改图接口没接到原图。"
-    if "没有可用的生图线路" in text:
-        return "中转站没有可用的生图线路。请检查额度，或改用「跳过二创」。"
-    if text.startswith(("中转站", "当前", "这个中转站", "全部二创", "文生图通道", "改图接口")):
+    if "没有可用的生图线路" in text or "no available compatible accounts" in lowered or "no available accounts" in lowered:
+        return (
+            "生图 Key 已经发到中转站，但这组 Key 现在没有可用的 gpt-image-2 线路。"
+            "对话/起名是通的。请到 newxxt 后台看生图组额度和线路，恢复后再跑二创，或先改用「跳过二创」。"
+        )
+    if text.startswith(("生图 Key", "中转站", "当前", "这个中转站", "全部二创", "文生图通道", "改图接口")):
         return text
     if "not supported by any configured account" in lowered or "model_not_found" in lowered:
         return (
@@ -61,8 +64,6 @@ def friendly_error_message(raw: str) -> str:
         return "请把接口改成 https://api.newxxt.top（不要带 /v1），生图模型填 gpt-image-2。"
     if "temporarily unavailable" in lowered or "upstream service" in lowered or "upstream_error" in lowered:
         return "中转站上游生图暂时不可用，请稍后再试，或改用「跳过二创」。"
-    if "no available compatible accounts" in lowered or "no available accounts" in lowered:
-        return "中转站没有可用的生图线路。请检查额度，或改用「跳过二创」。"
     if "batch_image_disabled" in lowered or "batch image" in lowered:
         return "中转站已关闭批量生图。请改用「跳过二创」。"
     if " | " in text or len(text) > 160:
