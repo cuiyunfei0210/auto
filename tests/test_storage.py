@@ -49,7 +49,7 @@ def test_load_config_recovers_from_corrupt_json(studio_home):
     bad = studio_home / "config.json"
     bad.write_text("{not json", encoding="utf-8")
     config = load_config()
-    assert config.accounts
+    assert config.accounts == []
     assert (studio_home / "config.bad.json").exists()
     assert (studio_home / "config.json").exists()
 

@@ -77,14 +77,14 @@ def test_start_rejects_shared_proxy(studio_home):
     assert "独立出口" in started.json()["error"]
 
 
-def test_empty_accounts_are_restored_to_default(studio_home):
+def test_empty_accounts_stay_empty(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
     payload = client.get("/api/state").json()["config"]
     payload["accounts"] = []
     assert client.post("/api/config", json=payload).status_code == 200
     state = client.get("/api/state").json()["config"]
-    assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
+    assert state["accounts"] == []
 
 
 def test_blank_remix_prompt_is_saved_as_default(studio_home):
@@ -107,13 +107,14 @@ def test_state_locks_api_host_to_newxxt(studio_home):
     assert state["config"]["api"]["base_url"] == "https://api.newxxt.top"
 
 
-def test_default_state_includes_cqwall_and_newxxt(studio_home):
+def test_default_state_has_no_builtin_credentials(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
     state = client.get("/api/state").json()["config"]
-    assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
+    assert state["accounts"] == []
     assert "newxxt.top" in state["api"]["base_url"]
-    assert state["api"]["api_key"].startswith("sk-")
+    assert state["api"]["api_key"] == ""
+    assert state["api"]["filename_api_key"] == ""
     assert state["api"]["filename_model"] == "gpt-5.4-mini"
 
 

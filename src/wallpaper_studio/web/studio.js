@@ -119,8 +119,13 @@ function applyConfig(config) {
   $("proxies").value = (config.network.proxies || []).join("\n");
   const body = $("account-rows");
   body.innerHTML = "";
-  (config.accounts || []).forEach((account) => body.appendChild(accountRow(account)));
-  $("account-count").textContent = String((config.accounts || []).length);
+  const accounts = config.accounts || [];
+  if (accounts.length) {
+    accounts.forEach((account) => body.appendChild(accountRow(account)));
+  } else {
+    body.appendChild(accountRow());
+  }
+  $("account-count").textContent = String(accounts.length);
 }
 
 function setStatus(running, stopping) {
