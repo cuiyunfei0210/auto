@@ -46,7 +46,7 @@ function accountRow(account = { username: "", password: "", upload_count: 3, int
   tr.innerHTML = `
     <td><input class="acc-user" value="${escapeAttr(account.username)}"></td>
     <td><input class="acc-pass" type="password" value="${escapeAttr(account.password)}"></td>
-    <td><input class="acc-count" type="number" min="1" value="${account.upload_count}"></td>
+    <td><input class="acc-count" type="number" min="1" max="10000" value="${account.upload_count}"></td>
     <td><input class="acc-interval" type="number" min="0" step="0.5" value="${account.interval_seconds}"></td>
     <td><input class="acc-proxy" placeholder="空则用代理池" value="${escapeAttr(account.proxy || "")}"></td>
     <td><button type="button" class="linkish acc-del">删除</button></td>
@@ -119,8 +119,13 @@ function applyConfig(config) {
   $("proxies").value = (config.network.proxies || []).join("\n");
   const body = $("account-rows");
   body.innerHTML = "";
-  (config.accounts || []).forEach((account) => body.appendChild(accountRow(account)));
-  $("account-count").textContent = String((config.accounts || []).length);
+  const accounts = config.accounts || [];
+  if (accounts.length) {
+    accounts.forEach((account) => body.appendChild(accountRow(account)));
+  } else {
+    body.appendChild(accountRow());
+  }
+  $("account-count").textContent = String(accounts.length);
 }
 
 function setStatus(running, stopping) {
@@ -194,9 +199,25 @@ function localStartProblems(cfg) {
 function formatErrorPayload(data) {
   if (!data) return "无法开始";
   if (typeof data.error === "string" && data.error.trim()) return data.error;
+  if (Array.isArray(data.error)) {
+    for (const item of data.error) {
+      const loc = Array.isArray(item.loc) ? item.loc.join(".") : "";
+      if (loc.includes("upload_count")) {
+        return `上传数量需在 1 到 10000 之间，请检查账号行的「上传数量」。`;
+      }
+    }
+    return "保存失败，请检查账号和密码是否填完整，数字是否在允许范围内。";
+  }
   if (Array.isArray(data.problems) && data.problems.length) return data.problems.join("\n");
-  if (Array.isArray(data.error)) return "保存失败，请检查账号和数字是否填完整";
   return "无法开始";
+}
+
+function saveConfigErrorMessage(data, fallback) {
+  if (Array.isArray(data && data.error)) {
+    const text = formatErrorPayload(data);
+    if (text !== "无法开始") return text;
+  }
+  return fallback;
 }
 
 async function parseJson(res) {
@@ -304,7 +325,7 @@ async function saveConfig({ silent = false } = {}) {
     return { ok: false, error: message };
   }
   if (!res.ok) {
-    const message = "保存失败，请检查账号和数字是否填完整。";
+    const message = saveConfigErrorMessage(data, "保存失败，请检查账号和密码是否填完整，数字是否在允许范围内。");
     if (!silent) notify(message);
     return { ok: false, error: message, ...data };
   }

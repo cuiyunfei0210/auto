@@ -51,16 +51,18 @@ def effective_remix_prompt(value: str | None) -> str:
 
 
 NEWXXT_API_BASE = "https://api.newxxt.top"
+# Legacy keys that used to ship in the app; clear them on load so installs stay portable.
 OLD_NEWXXT_API_KEYS = {
     "sk-beef6174c1f75a4eec5a5890a1f4ed02a3d4824ec72962cb51960d66d577c927",
+    "sk-ac87085afeb3d0fcf7574c86f021d5421d1f690b9dbcd1358aa9ec85ead98e29",
+    "sk-dcaeb94ce3a1dd94713f43d844776a122d152585f34e7f136f62577cca3a618f",
 }
-NEWXXT_API_KEY = "sk-ac87085afeb3d0fcf7574c86f021d5421d1f690b9dbcd1358aa9ec85ead98e29"
-NEWXXT_CHAT_KEY = "sk-dcaeb94ce3a1dd94713f43d844776a122d152585f34e7f136f62577cca3a618f"
 DEFAULT_CHAT_MODEL = "gpt-5.4-mini"
 DEFAULT_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_FILENAME_PROMPT = (
     "Write a short English wallpaper title, max 18 characters, no file extension, no quotes."
 )
+MAX_UPLOAD_COUNT = 10000
 _OLD_FILENAME_PROMPTS = {
     "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes.",
 }
@@ -76,7 +78,7 @@ def upgrade_filename_prompt(value: str | None) -> str:
 
 class ApiSettings(BaseModel):
     base_url: str = NEWXXT_API_BASE
-    api_key: str = NEWXXT_API_KEY
+    api_key: str = ""
     username: str = ""
     password: str = ""
     remix_model: str = DEFAULT_IMAGE_MODEL
@@ -144,7 +146,7 @@ class SiteProfile(BaseModel):
 class Account(BaseModel):
     username: str
     password: str
-    upload_count: int = Field(default=3, ge=1, le=500)
+    upload_count: int = Field(default=3, ge=1, le=MAX_UPLOAD_COUNT)
     interval_seconds: float = Field(default=8, ge=0, le=3600)
     proxy: str | None = None
 
@@ -178,20 +180,8 @@ def default_site_profile() -> SiteProfile:
     return cqwall_site()
 
 
-def default_accounts() -> list[Account]:
-    return [
-        Account(
-            username="ari-ihcot@linshi-mail.com",
-            password="123123123",
-            upload_count=3,
-            interval_seconds=8,
-        )
-    ]
-
-
 RELAY_EMAILS_IN_CQWALL_SLOT = {"1252597792@qq.com", "596003517@qq.com"}
 DEFAULT_API_BASE = NEWXXT_API_BASE
-DEFAULT_API_KEY = NEWXXT_API_KEY
 
 
 def _relay_root(url: str) -> str:
@@ -211,10 +201,9 @@ def title_api_settings(settings: ApiSettings) -> ApiSettings:
 
 
 def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
-    """Fill empty/legacy fields with CQwall accounts and lock the API host to newxxt."""
+    """Normalize legacy relay hosts and model defaults; never inject private credentials."""
     payload = config.model_dump()
     changed = False
-    wanted = "ari-ihcot@linshi-mail.com"
     accounts = [
         item
         for item in (payload.get("accounts") or [])
@@ -223,31 +212,20 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
     if accounts != payload.get("accounts"):
         payload["accounts"] = accounts
         changed = True
-    names = {str(item.get("username") or "").strip().lower() for item in accounts}
-    if wanted.lower() not in names:
-        payload["accounts"] = [item.model_dump() for item in default_accounts()] + accounts
-        changed = True
     api = payload.setdefault("api", {})
     wanted_url = _relay_root(NEWXXT_API_BASE)
     current_url = _relay_root(str(api.get("base_url") or ""))
     current_key = str(api.get("api_key") or "").strip()
     if current_url != wanted_url:
         api["base_url"] = NEWXXT_API_BASE
-        api["api_key"] = NEWXXT_API_KEY
-        current_key = NEWXXT_API_KEY
-        if not str(api.get("filename_api_key") or "").strip():
-            api["filename_api_key"] = NEWXXT_CHAT_KEY
         api["filename_base_url"] = ""
         changed = True
-    elif current_key in OLD_NEWXXT_API_KEYS:
-        api["api_key"] = NEWXXT_API_KEY
-        current_key = NEWXXT_API_KEY
-        if not str(api.get("filename_api_key") or "").strip():
-            api["filename_api_key"] = NEWXXT_CHAT_KEY
+    if current_key in OLD_NEWXXT_API_KEYS:
+        api["api_key"] = ""
         changed = True
-    elif not current_key:
-        api["api_key"] = NEWXXT_API_KEY
-        current_key = NEWXXT_API_KEY
+    title_key = str(api.get("filename_api_key") or "").strip()
+    if title_key in OLD_NEWXXT_API_KEYS:
+        api["filename_api_key"] = ""
         changed = True
     title_url = _relay_root(str(api.get("filename_base_url") or ""))
     if title_url and title_url != wanted_url:
@@ -281,7 +259,7 @@ class AppConfig(BaseModel):
     api: ApiSettings = Field(default_factory=ApiSettings)
     paths: PathSettings = Field(default_factory=PathSettings)
     site: SiteProfile = Field(default_factory=default_site_profile)
-    accounts: list[Account] = Field(default_factory=default_accounts)
+    accounts: list[Account] = Field(default_factory=list)
     network: NetworkSettings = Field(default_factory=NetworkSettings)
 
     @field_validator("mode")

@@ -42,6 +42,29 @@ def test_home_and_config_roundtrip(studio_home):
     assert saved.json()["config"]["upload_category"] == "动漫"
 
 
+def test_config_accepts_large_upload_count(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = [
+        {"username": "demo1", "password": "123123", "upload_count": 1000, "interval_seconds": 8}
+    ]
+    saved = client.post("/api/config", json=payload)
+    assert saved.status_code == 200
+    assert saved.json()["config"]["accounts"][0]["upload_count"] == 1000
+
+
+def test_config_rejects_upload_count_above_limit(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = [
+        {"username": "demo1", "password": "123123", "upload_count": 10001, "interval_seconds": 8}
+    ]
+    saved = client.post("/api/config", json=payload)
+    assert saved.status_code == 400
+
+
 def test_config_clears_image_size_limits(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
@@ -77,14 +100,14 @@ def test_start_rejects_shared_proxy(studio_home):
     assert "独立出口" in started.json()["error"]
 
 
-def test_empty_accounts_are_restored_to_default(studio_home):
+def test_empty_accounts_stay_empty(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
     payload = client.get("/api/state").json()["config"]
     payload["accounts"] = []
     assert client.post("/api/config", json=payload).status_code == 200
     state = client.get("/api/state").json()["config"]
-    assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
+    assert state["accounts"] == []
 
 
 def test_blank_remix_prompt_is_saved_as_default(studio_home):
@@ -107,13 +130,14 @@ def test_state_locks_api_host_to_newxxt(studio_home):
     assert state["config"]["api"]["base_url"] == "https://api.newxxt.top"
 
 
-def test_default_state_includes_cqwall_and_newxxt(studio_home):
+def test_default_state_has_no_builtin_credentials(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
     state = client.get("/api/state").json()["config"]
-    assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
+    assert state["accounts"] == []
     assert "newxxt.top" in state["api"]["base_url"]
-    assert state["api"]["api_key"].startswith("sk-")
+    assert state["api"]["api_key"] == ""
+    assert state["api"]["filename_api_key"] == ""
     assert state["api"]["filename_model"] == "gpt-5.4-mini"
 
 
