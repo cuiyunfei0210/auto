@@ -62,6 +62,7 @@ DEFAULT_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_FILENAME_PROMPT = (
     "Write a short English wallpaper title, max 18 characters, no file extension, no quotes."
 )
+MAX_UPLOAD_COUNT = 10000
 _OLD_FILENAME_PROMPTS = {
     "Write a short Chinese wallpaper title, max 18 characters, no file extension, no quotes.",
 }
@@ -145,7 +146,7 @@ class SiteProfile(BaseModel):
 class Account(BaseModel):
     username: str
     password: str
-    upload_count: int = Field(default=3, ge=1, le=500)
+    upload_count: int = Field(default=3, ge=1, le=MAX_UPLOAD_COUNT)
     interval_seconds: float = Field(default=8, ge=0, le=3600)
     proxy: str | None = None
 

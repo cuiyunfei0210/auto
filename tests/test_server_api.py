@@ -42,6 +42,29 @@ def test_home_and_config_roundtrip(studio_home):
     assert saved.json()["config"]["upload_category"] == "动漫"
 
 
+def test_config_accepts_large_upload_count(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = [
+        {"username": "demo1", "password": "123123", "upload_count": 1000, "interval_seconds": 8}
+    ]
+    saved = client.post("/api/config", json=payload)
+    assert saved.status_code == 200
+    assert saved.json()["config"]["accounts"][0]["upload_count"] == 1000
+
+
+def test_config_rejects_upload_count_above_limit(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = [
+        {"username": "demo1", "password": "123123", "upload_count": 10001, "interval_seconds": 8}
+    ]
+    saved = client.post("/api/config", json=payload)
+    assert saved.status_code == 400
+
+
 def test_config_clears_image_size_limits(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
