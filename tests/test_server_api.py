@@ -18,6 +18,9 @@ def test_home_and_config_roundtrip(studio_home):
     assert js.status_code == 200
     assert "function renderLogs" in js.text
     assert "function notify" in js.text
+    assert "function collectAccounts" in js.text
+    assert "secretStore" in js.text
+    assert "btn-save" in home.text
     assert "function canonicalCategory" in js.text
     assert "upload_category" in js.text
     assert "function appendLog" in js.text
@@ -85,6 +88,19 @@ def test_empty_accounts_are_restored_to_default(studio_home):
     assert client.post("/api/config", json=payload).status_code == 200
     state = client.get("/api/state").json()["config"]
     assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
+
+
+def test_saved_user_account_is_not_replaced_by_demo(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = [
+        {"username": "me@qq.com", "password": "secret-pass", "upload_count": 2, "interval_seconds": 1}
+    ]
+    assert client.post("/api/config", json=payload).status_code == 200
+    state = client.get("/api/state").json()["config"]
+    assert [item["username"] for item in state["accounts"]] == ["me@qq.com"]
+    assert state["accounts"][0]["password"] == "secret-pass"
 
 
 def test_blank_remix_prompt_is_saved_as_default(studio_home):

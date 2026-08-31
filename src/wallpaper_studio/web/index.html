@@ -32,7 +32,10 @@
           <h1 id="heading">任务</h1>
           <p id="subheading">先准备图片，再按账号队列模拟网页上传。</p>
         </div>
-        <div class="status-pill" id="status-pill">空闲</div>
+        <div class="top-actions">
+          <button type="button" class="ghost btn-save">保存设置</button>
+          <div class="status-pill" id="status-pill">空闲</div>
+        </div>
       </header>
 
       <p class="banner" id="env-banner" hidden></p>
@@ -75,7 +78,7 @@
             <div class="actions">
               <button type="button" class="primary" id="btn-start">开始任务</button>
               <button type="button" class="ghost" id="btn-stop">停止</button>
-              <button type="button" class="ghost" id="btn-save">保存设置</button>
+              <button type="button" class="ghost btn-save">保存设置</button>
               <button type="button" class="ghost" id="btn-quit">退出程序</button>
             </div>
             <p class="hint" id="path-hint"></p>
@@ -106,7 +109,7 @@
             <h2>账号队列</h2>
             <button class="ghost" id="btn-add-account">添加账号</button>
           </div>
-          <p class="hint">按列表顺序登录。CQwall 用邮箱当账号。当前账号的数量用完后，自动退出并登录下一个。每个账号应走不同出口，避免多个账号落在同一个 IP。</p>
+          <p class="hint">按列表顺序登录。CQwall 用邮箱当账号。当前账号的数量用完后，自动退出并登录下一个。每个账号应走不同出口，避免多个账号落在同一个 IP。填好后点右上角「保存设置」即可，不必先回到任务页。</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -185,9 +188,9 @@
         <article class="card">
           <h2>中转站 API</h2>
           <p class="hint">中转站固定 https://api.newxxt.top，生图用 gpt-image-2，写标题用 gpt-5.4-mini。</p>
-          <label>中转站邮箱<input id="api_username"></label>
-          <label>中转站密码<input id="api_password" type="password"></label>
-          <label>生图 API Key<input id="api_key" type="password" placeholder="sk-…"></label>
+          <label>中转站邮箱<input id="api_username" autocomplete="off" spellcheck="false"></label>
+          <label>中转站密码<input id="api_password" type="password" autocomplete="new-password"></label>
+          <label>生图 API Key<input id="api_key" type="password" autocomplete="new-password" placeholder="sk-…"></label>
           <label>二创对话模型（生图请保持 gpt-image-2，不要填 gpt-5.x）<input id="remix_chat_model"></label>
           <label>生图模型<input id="remix_model" list="remix-model-options" placeholder="gpt-image-2"></label>
           <datalist id="remix-model-options">
@@ -200,7 +203,7 @@
             <option value="gpt-5.4">gpt-5.4</option>
             <option value="gpt-5.2">gpt-5.2</option>
           </datalist>
-          <label>对话 API Key<input id="filename_api_key" type="password" placeholder="跟生图不是同一组 Key 时再填"></label>
+          <label>对话 API Key<input id="filename_api_key" type="password" autocomplete="new-password" placeholder="跟生图不是同一组 Key 时再填"></label>
           <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="按你的二创要求写，例如正午冷色调、更锐利。分类以任务页选择为准"></textarea></label>
           <p class="hint">会按你填的二创提示词生成。分类以任务页本轮选择为准：选了军事就是军事，选了动漫就是动漫，识图不会改分类。上传 CQwall 也用这个分类。</p>
           <label>文件名提示词（根据图片生成上传标题）<textarea id="filename_prompt" rows="3" placeholder="Write a short English wallpaper title, max 18 characters"></textarea></label>
@@ -218,6 +221,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260824b" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260831a" charset="utf-8"></script>
 </body>
 </html>

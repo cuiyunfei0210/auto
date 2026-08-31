@@ -192,6 +192,17 @@ def test_apply_defaults_keeps_custom_newxxt_key_and_fixes_accounts():
     assert all(item.username != "1252597792@qq.com" for item in updated.accounts)
 
 
+def test_apply_defaults_keeps_user_cqwall_account():
+    config = AppConfig.model_validate(
+        {
+            "accounts": [{"username": "me@qq.com", "password": "secret-pass", "upload_count": 2, "interval_seconds": 1}],
+        }
+    )
+    updated = apply_builtin_defaults(config)
+    assert [item.username for item in updated.accounts] == ["me@qq.com"]
+    assert updated.accounts[0].password == "secret-pass"
+
+
 def test_apply_defaults_migrates_old_newxxt_key_and_adds_chat_key():
     from wallpaper_studio.models import NEWXXT_API_KEY, NEWXXT_CHAT_KEY
 

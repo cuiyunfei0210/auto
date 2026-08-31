@@ -214,7 +214,6 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
     """Fill empty/legacy fields with CQwall accounts and lock the API host to newxxt."""
     payload = config.model_dump()
     changed = False
-    wanted = "ari-ihcot@linshi-mail.com"
     accounts = [
         item
         for item in (payload.get("accounts") or [])
@@ -223,9 +222,8 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
     if accounts != payload.get("accounts"):
         payload["accounts"] = accounts
         changed = True
-    names = {str(item.get("username") or "").strip().lower() for item in accounts}
-    if wanted.lower() not in names:
-        payload["accounts"] = [item.model_dump() for item in default_accounts()] + accounts
+    if not accounts:
+        payload["accounts"] = [item.model_dump() for item in default_accounts()]
         changed = True
     api = payload.setdefault("api", {})
     wanted_url = _relay_root(NEWXXT_API_BASE)

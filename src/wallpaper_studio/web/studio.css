@@ -72,6 +72,14 @@ main { padding: 28px 36px 48px; overflow: auto; height: 100%; }
 h1 { margin: 0; font-weight: 600; font-size: 32px; }
 #subheading { color: var(--muted); margin: 8px 0 24px; font-family: ui-sans-serif, system-ui, sans-serif; }
 
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.top-actions .ghost { width: auto; }
+
 .status-pill {
   font-family: ui-sans-serif, system-ui, sans-serif;
   border: 1px solid var(--line);
@@ -194,6 +202,16 @@ button:disabled {
   white-space: pre-wrap;
 }
 .hidden { display: none; }
+.pane.hidden {
+  display: block;
+  visibility: hidden;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  pointer-events: none;
+}
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .table-wrap { overflow-x: auto; }
 .acc-proxy { min-width: 180px; }
