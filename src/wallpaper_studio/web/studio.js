@@ -1,5 +1,5 @@
 const headings = {
-  job: ["任务", "先准备图片，再按账号队列模拟网页上传。"],
+  job: ["任务", "先选本轮分类，再准备图片，按账号队列模拟网页上传。"],
   folders: ["文件夹", "源图和一个单独的输出目录。"],
   accounts: ["账号", "一个账号传完再换下一个；每个账号尽量使用不同出口。"],
   site: ["网页上传", "上传时用内置浏览器填登录表和上传表，不调用壁纸站后台接口。"],
@@ -13,26 +13,109 @@ const siteFields = [
   "category_selector", "category_value", "agree_selector", "submit_selector", "success_text",
 ];
 
+const CATEGORY_OPTIONS = [
+  ["1", "动物"], ["2", "军事"], ["3", "汽车"], ["4", "电影"], ["5", "时代"], ["6", "明星"],
+  ["7", "宇宙"], ["8", "美女"], ["9", "风景"], ["10", "动漫"], ["17", "游戏"], ["18", "都市"],
+];
+
+function canonicalCategory(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  for (const [id, name] of CATEGORY_OPTIONS) {
+    if (raw === id || raw === name) return name;
+  }
+  const lowered = raw.toLowerCase();
+  const aliases = {
+    animals: "动物", military: "军事", cars: "汽车", movie: "电影", era: "时代",
+    celebrity: "明星", universe: "宇宙", girl: "美女", scenery: "风景", anime: "动漫",
+    games: "游戏", urban: "都市",
+  };
+  return aliases[lowered] || "";
+}
+
 const FIXED_API_BASE = "https://api.newxxt.top";
 const apiFields = [
   "api_key", "remix_chat_model", "remix_model", "filename_model",
-  "filename_base_url", "filename_api_key", "remix_prompt", "filename_prompt", "image_size",
+  "filename_api_key", "remix_prompt", "filename_prompt", "image_size",
 ];
 
 function $(id) { return document.getElementById(id); }
 
+const secretStore = {};
+let accountSeq = 0;
+
+function bindSecret(input, key) {
+  if (!input) return;
+  const remember = () => {
+    secretStore[key] = input.value;
+  };
+  input.addEventListener("input", remember);
+  input.addEventListener("change", remember);
+  if (input.value) secretStore[key] = input.value;
+}
+
+function readSecret(input, key) {
+  const live = input ? String(input.value || "") : "";
+  if (live) {
+    secretStore[key] = live;
+    return live;
+  }
+  return secretStore[key] || "";
+}
+
+function clearAccountSecrets() {
+  for (const key of Object.keys(secretStore)) {
+    if (key.startsWith("acc-")) delete secretStore[key];
+  }
+}
+
 function accountRow(account = { username: "", password: "", upload_count: 3, interval_seconds: 8, proxy: "" }) {
+  const id = String(++accountSeq);
   const tr = document.createElement("tr");
+  tr.dataset.rowId = id;
   tr.innerHTML = `
-    <td><input class="acc-user" value="${escapeAttr(account.username)}"></td>
-    <td><input class="acc-pass" type="password" value="${escapeAttr(account.password)}"></td>
+    <td><input class="acc-user" autocomplete="off" spellcheck="false"></td>
+    <td><input class="acc-pass" type="password" autocomplete="new-password"></td>
     <td><input class="acc-count" type="number" min="1" value="${account.upload_count}"></td>
     <td><input class="acc-interval" type="number" min="0" step="0.5" value="${account.interval_seconds}"></td>
-    <td><input class="acc-proxy" placeholder="空则用代理池" value="${escapeAttr(account.proxy || "")}"></td>
+    <td><input class="acc-proxy" placeholder="空则用代理池" autocomplete="off"></td>
     <td><button type="button" class="linkish acc-del">删除</button></td>
   `;
-  tr.querySelector(".acc-del").onclick = () => tr.remove();
+  const user = tr.querySelector(".acc-user");
+  const pass = tr.querySelector(".acc-pass");
+  const proxy = tr.querySelector(".acc-proxy");
+  user.value = account.username || "";
+  pass.value = account.password || "";
+  proxy.value = account.proxy || "";
+  bindSecret(user, `acc-user-${id}`);
+  bindSecret(pass, `acc-pass-${id}`);
+  secretStore[`acc-user-${id}`] = user.value;
+  secretStore[`acc-pass-${id}`] = pass.value;
+  tr.querySelector(".acc-del").onclick = () => {
+    delete secretStore[`acc-user-${id}`];
+    delete secretStore[`acc-pass-${id}`];
+    tr.remove();
+  };
   return tr;
+}
+
+function collectAccounts() {
+  const rows = [...document.querySelectorAll("#account-rows tr")].map((row) => {
+    const id = row.dataset.rowId || "";
+    return {
+      username: readSecret(row.querySelector(".acc-user"), `acc-user-${id}`).trim(),
+      password: readSecret(row.querySelector(".acc-pass"), `acc-pass-${id}`),
+      upload_count: Number(row.querySelector(".acc-count").value || 1),
+      interval_seconds: Number(row.querySelector(".acc-interval").value || 0),
+      proxy: row.querySelector(".acc-proxy").value.trim(),
+    };
+  });
+  const filled = rows.filter((item) => item.username || item.password);
+  const incomplete = filled.filter((item) => !item.username || !item.password);
+  return {
+    accounts: filled.filter((item) => item.username && item.password),
+    incomplete,
+  };
 }
 
 function escapeAttr(value) {
@@ -40,13 +123,8 @@ function escapeAttr(value) {
 }
 
 function collectConfig() {
-  const accounts = [...document.querySelectorAll("#account-rows tr")].map((row) => ({
-    username: row.querySelector(".acc-user").value.trim(),
-    password: row.querySelector(".acc-pass").value,
-    upload_count: Number(row.querySelector(".acc-count").value || 1),
-    interval_seconds: Number(row.querySelector(".acc-interval").value || 0),
-    proxy: row.querySelector(".acc-proxy").value.trim(),
-  })).filter((item) => item.username && item.password);
+  const collected = collectAccounts();
+  const accounts = collected.accounts;
 
   const site = {};
   for (const key of siteFields) site[key] = $(key).value;
@@ -57,11 +135,15 @@ function collectConfig() {
   const api = {};
   for (const key of apiFields) api[key] = $(key).value;
   api.base_url = FIXED_API_BASE;
-  api.username = $("api_username") ? $("api_username").value.trim() : "";
-  api.password = $("api_password") ? $("api_password").value : "";
+  api.filename_base_url = FIXED_API_BASE;
+  api.username = readSecret($("api_username"), "api_username").trim();
+  api.password = readSecret($("api_password"), "api_password");
+  api.api_key = readSecret($("api_key"), "api_key");
+  api.filename_api_key = readSecret($("filename_api_key"), "filename_api_key");
 
   return {
     mode: document.querySelector("input[name=mode]:checked").value,
+    upload_category: canonicalCategory($("upload_category") ? $("upload_category").value : ""),
     api,
     paths: {
       source_dir: $("source_dir").value.trim(),
@@ -75,11 +157,13 @@ function collectConfig() {
       rotate_every_accounts: Number($("rotate_every_accounts").value || 1),
       proxies: $("proxies").value.split("\n").map((line) => line.trim()).filter(Boolean),
     },
+    _incompleteAccounts: collected.incomplete,
   };
 }
 
 function applyConfig(config) {
   document.querySelector(`input[name=mode][value="${config.mode}"]`).checked = true;
+  if ($("upload_category")) $("upload_category").value = canonicalCategory(config.upload_category || "");
   $("source_dir").value = config.paths.source_dir || "";
   $("output_dir").value = config.paths.output_dir || "";
   for (const key of siteFields) $(key).value = config.site[key] == null ? "" : config.site[key];
@@ -90,12 +174,17 @@ function applyConfig(config) {
   for (const key of apiFields) $(key).value = config.api[key] == null ? "" : config.api[key];
   if ($("api_username")) $("api_username").value = config.api.username || "";
   if ($("api_password")) $("api_password").value = config.api.password || "";
+  secretStore.api_username = $("api_username") ? $("api_username").value : "";
+  secretStore.api_password = $("api_password") ? $("api_password").value : "";
+  secretStore.api_key = $("api_key") ? $("api_key").value : "";
+  secretStore.filename_api_key = $("filename_api_key") ? $("filename_api_key").value : "";
   $("proxy_enabled").checked = Boolean(config.network.proxy_enabled);
   $("unique_ip_per_account").checked = config.network.unique_ip_per_account !== false;
   $("rotate_every_accounts").value = config.network.rotate_every_accounts == null ? 1 : config.network.rotate_every_accounts;
   $("proxies").value = (config.network.proxies || []).join("\n");
   const body = $("account-rows");
   body.innerHTML = "";
+  clearAccountSecrets();
   (config.accounts || []).forEach((account) => body.appendChild(accountRow(account)));
   $("account-count").textContent = String((config.accounts || []).length);
 }
@@ -131,7 +220,8 @@ function renderLogs(lines) {
 }
 
 function notify(message) {
-  const text = String(message || "").trim() || "发生了未知问题。";
+  let text = String(message || "").trim() || "发生了未知问题。";
+  if (text.length > 180) text = `${text.slice(0, 180)}…`;
   window.alert(text);
 }
 
@@ -139,6 +229,9 @@ function localStartProblems(cfg) {
   const problems = [];
   if (!cfg.accounts.length) {
     problems.push("还没有账号。请到「账号」页填写 CQwall 邮箱和密码。");
+  }
+  if (!canonicalCategory(cfg.upload_category)) {
+    problems.push("请先在任务页选择本轮分类。选了什么分类，二创和上传就按什么分类。");
   }
   const sourceCount = Number(lastState.source_count != null ? lastState.source_count : ($("source-count").textContent || 0));
   if (!Number.isFinite(sourceCount) || sourceCount <= 0) {
@@ -263,10 +356,17 @@ async function refresh() {
 }
 
 async function saveConfig({ silent = false } = {}) {
+  const cfg = collectConfig();
+  if (cfg._incompleteAccounts && cfg._incompleteAccounts.length) {
+    const message = "有账号没填完整。请把邮箱和密码都填上，或删掉空行。";
+    if (!silent) notify(message);
+    return { ok: false, error: message };
+  }
+  delete cfg._incompleteAccounts;
   const res = await fetch("/api/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(collectConfig()),
+    body: JSON.stringify(cfg),
   });
   let data = {};
   try {
@@ -306,11 +406,17 @@ document.querySelectorAll("aside nav button").forEach((button) => {
 });
 
 bindClick("btn-add-account", () => $("account-rows").appendChild(accountRow()));
-bindClick("btn-save", async () => {
-  const data = await saveConfig();
-  if (data && data.ok === false) return;
-  notify("设置已保存。");
-});
+function bindSaveButtons() {
+  document.querySelectorAll(".btn-save").forEach((button) => {
+    button.onclick = async () => {
+      const data = await saveConfig();
+      if (data && data.ok === false) return;
+      notify("设置已保存。");
+    };
+  });
+}
+bindSaveButtons();
+["api_username", "api_password", "api_key", "filename_api_key"].forEach((id) => bindSecret($(id), id));
 bindClick("btn-start", async () => {
   const running = $("status-pill").classList.contains("live");
   if (running) {

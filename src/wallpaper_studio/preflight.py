@@ -4,6 +4,7 @@ from wallpaper_studio.files import empty_source_message, list_images
 from wallpaper_studio.models import AppConfig
 from wallpaper_studio.paths import archive_temp_warning
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
+from wallpaper_studio.sites import locked_upload_category
 from wallpaper_studio.storage import output_dir, source_dir
 
 
@@ -15,6 +16,8 @@ def start_problems(config: AppConfig) -> list[str]:
         problems.append(warning)
     if not config.accounts:
         problems.append("还没有账号。请到「账号」页填写 CQwall 邮箱和密码。")
+    if not locked_upload_category(config.upload_category):
+        problems.append("请先在任务页选择本轮分类。选了什么分类，二创和上传就按什么分类。")
     if not (config.site.login_url or "").strip():
         problems.append("网页上传的登录地址是空的。请到「网页上传」检查。")
     if not (config.site.username_selector or "").strip() or not (config.site.password_selector or "").strip():

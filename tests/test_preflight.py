@@ -20,7 +20,7 @@ def test_start_problems_reports_remix_without_credentials(studio_home):
     make_png(studio_home / "source" / "one.png")
     config = AppConfig(
         mode="remix_then_upload",
-        api=ApiSettings(base_url="https://xmapi.site", api_key="", username="", password=""),
+        api=ApiSettings(base_url="https://api.newxxt.top", api_key="", username="", password=""),
         accounts=[Account(username="demo1", password="123123")],
         paths=PathSettings(source_dir=str(studio_home / "source")),
     )
@@ -47,3 +47,40 @@ def test_start_rejects_empty_source_folder(studio_home):
     assert body["ok"] is False
     assert "没有图片" in body["error"]
     assert body["problems"]
+
+
+def test_start_problems_requires_upload_category(studio_home):
+    make_png(studio_home / "source" / "one.png")
+    config = AppConfig(
+        mode="upload_only",
+        accounts=[Account(username="demo1", password="123123")],
+        paths=PathSettings(source_dir=str(studio_home / "source")),
+    )
+    problems = start_problems(config)
+    assert any("选择本轮分类" in item for item in problems)
+
+    config.upload_category = "动漫"
+    problems = start_problems(config)
+    assert not any("分类" in item for item in problems)
+
+
+def test_start_rejects_missing_upload_category(studio_home):
+    from fastapi.testclient import TestClient
+
+    from wallpaper_studio.demo_site import reset_demo_sessions
+    from wallpaper_studio.server import create_app
+
+    make_png(studio_home / "source" / "one.png")
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["mode"] = "upload_only"
+    payload["upload_category"] = ""
+    payload["paths"]["source_dir"] = str(studio_home / "source")
+    payload["accounts"] = [{"username": "demo1", "password": "123123", "upload_count": 1, "interval_seconds": 0}]
+    assert client.post("/api/config", json=payload).status_code == 200
+    started = client.post("/api/start")
+    assert started.status_code == 400
+    body = started.json()
+    assert body["ok"] is False
+    assert "选择本轮分类" in body["error"]

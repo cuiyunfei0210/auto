@@ -2,8 +2,22 @@ from pathlib import Path
 
 from wallpaper_studio.files import filter_by_min_size
 from wallpaper_studio.models import SiteProfile
-from wallpaper_studio.sites import cqwall_category_hint, cqwall_site, map_category
+from wallpaper_studio.sites import cqwall_category_hint, cqwall_site, map_category, parse_category_reply
 from tests.helpers import make_png
+
+
+def test_parse_category_reply_keeps_military_and_subject():
+    category, subject = parse_category_reply(
+        "CATEGORY: 军事\nSUBJECT: a soldier in tactical gear holding a rifle"
+    )
+    assert category == "军事"
+    assert "soldier" in subject
+
+
+def test_parse_category_reply_infers_military_from_prose():
+    category, subject = parse_category_reply("modern soldier in tactical gear with a rifle")
+    assert category == "军事"
+    assert "soldier" in subject
 
 
 def test_map_category_accepts_chinese_and_ids():
@@ -16,6 +30,16 @@ def test_map_category_accepts_chinese_and_ids():
     assert map_category("美女") == "8"
 
 
+def test_locked_upload_category_accepts_id_and_name():
+    from wallpaper_studio.sites import locked_upload_category
+
+    assert locked_upload_category("动漫") == "动漫"
+    assert locked_upload_category("10") == "动漫"
+    assert locked_upload_category("anime") == "动漫"
+    assert locked_upload_category("") == ""
+    assert locked_upload_category("不是分类") == ""
+
+
 def test_cqwall_category_hint_lists_all_live_ids():
     hint = cqwall_category_hint()
     assert hint == (
@@ -26,6 +50,11 @@ def test_cqwall_category_hint_lists_all_live_ids():
         encoding="utf-8"
     )
     assert hint in html
+    assert 'id="upload_category"' in html
+    from wallpaper_studio.sites import CQWALL_CATEGORY_LABELS
+
+    for _cid, name in CQWALL_CATEGORY_LABELS:
+        assert f'value="{name}"' in html
 
 
 def test_category_choices_include_id_and_names():

@@ -59,8 +59,7 @@ Windows / Linux / macOS 都会各打一份。
 ## 能做什么
 
 - 跳过二创，直接选本地文件夹上传
-- 对接中转站 API（默认 `https://api.newxxt.top`，生图 `gpt-image-2`，起名 `gpt-5.4-mini`）做图生图
-- 也可以换成 `https://www.aipixapi.art/` 生图（这组 Key 只有 gpt-image-2，写标题仍走 newxxt）
+- 对接中转站 API（固定 `https://api.newxxt.top`，生图 `gpt-image-2`，起名 `gpt-5.4-mini`）做图生图
 - 多账号队列：每个账号可设上传数量、间隔和独立代理
 - 用 Chromium 打开登录页、填表、选文件、点发布（不调壁纸站后台接口）
 - 代理可选。默认 **一个账号一个出口 IP**，代理不够或两个账号填了同一个代理时会拒绝开跑；关掉代理也能正常上传
@@ -86,17 +85,15 @@ python run.py
 4. 点「开始任务」
 5. 打开 [示例站上传页](http://127.0.0.1:8765/demo/login) 查看两个账号各自收到的图
 
-对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)，账号页预填 `ari-ihcot@linshi-mail.com`。分类默认风景（值为 9）。当前分类：1 动物 / 2 军事 / 3 汽车 / 4 电影 / 5 时代 / 6 明星 / 7 宇宙 / 8 美女 / 9 风景 / 10 动漫 / 17 游戏 / 18 都市。程序不限制图片宽高。
+对真实壁纸站：默认已对接 [CQwall](https://www.cqwall.com/)，账号页预填 `ari-ihcot@linshi-mail.com`。每次开始任务前，先在「任务」页选择本轮分类；二创和上传都按这个分类，不会用识图结果覆盖。当前分类：1 动物 / 2 军事 / 3 汽车 / 4 电影 / 5 时代 / 6 明星 / 7 宇宙 / 8 美女 / 9 风景 / 10 动漫 / 17 游戏 / 18 都市。程序不限制图片宽高。
 
-中转站默认 [api.newxxt.top](https://api.newxxt.top/)，也可以用 [aipixapi.art](https://www.aipixapi.art/)。不要填 `xbhuiz.com`（那条线路不能生图）。接口地址不要带 `/v1`。账号队列里不要填中转站邮箱。
+中转站只用 [api.newxxt.top](https://api.newxxt.top/)。接口地址不要带 `/v1`。账号队列里不要填中转站邮箱。
 
 ## 二创
 
-在「二创 API」可选中转站模板。默认是 `https://api.newxxt.top`：生图用 `gpt-image-2`，根据图片写标题用 `gpt-5.4-mini`。OpenCode 配置里的 `gpt-5.x` 是对话模型，不要填进生图模型。
+「二创 API」固定走 `https://api.newxxt.top`：生图用 `gpt-image-2`，根据图片写标题用 `gpt-5.4-mini`。OpenCode 配置里的 `gpt-5.x` 是对话模型，不要填进生图模型。
 
-`https://www.aipixapi.art` 这组 Key 只有 `gpt-image-2`，适合生图；写标题会改走 newxxt。`xmapi.site` 同样是生图为主。
-
-`gpt-image-2` 会先试按原图改图。newxxt 的 `/v1/images/edits` 会报 `image_generation` tools 错，后台测小狗只证明文生图通了，而且这条文生图有时也会被转进坏通道。改图失败后会先识图再走带 `quality` 的文生图；还不行会改走 aipixapi 生图，标题仍用 newxxt 对话 Key。newxxt 请把「生图」Key 填进生图栏，「对话」Key 填进对话栏。
+`gpt-image-2` 会先按原图走 `/v1/images/edits` 改图，并带上你填的二创提示词。分类以任务页本轮选择为准：选了军事就是军事，选了动漫就是动漫。改图失败后的文生图和上传 CQwall 也用这个分类，识图不会改分类。请把「生图」Key 填进生图栏，「对话」Key 填进对话栏。
 
 `gpt-image-2` 只能原生出 `1024x1024` / `1536x1024` / `1024x1536`。出图尺寸填 `1920x1080`、`2K`、`4K` 时，会先按最接近的原生尺寸出图，再放大到你填的宽高。CQwall 最少要 1920×1080，推荐填 `1920x1080`。
 

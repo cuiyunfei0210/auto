@@ -12,6 +12,7 @@ from wallpaper_studio.files import (
 )
 from wallpaper_studio.models import AppConfig, PreparedImage, title_api_settings
 from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message
+from wallpaper_studio.sites import locked_upload_category
 from wallpaper_studio.storage import output_dir, source_dir
 
 LogFn = Callable[[str], None]
@@ -52,19 +53,22 @@ def prepare_images(
         emit(
             "根据图片写标题需要对话/识图模型。"
             f"当前填的是 {config.api.filename_model or '空'}。"
-            "gpt-image-2 不能起名。newxxt 请填 gpt-5.4-mini；"
-            "aipixapi / xmapi 这组 Key 只有生图，请把「写标题接口」改成 https://api.newxxt.top。"
+            "gpt-image-2 不能起名，请把文件名模型改成 gpt-5.4-mini。"
         )
 
     remaining = len(images) if config.mode == "remix_then_upload" else 0
     total = remaining
+    skipped = 0
+    chosen = locked_upload_category(config.upload_category)
     if progress:
         progress(remaining, total)
+    if chosen:
+        emit(f"本轮分类固定为「{chosen}」。二创和上传都按这个分类，识图结果不会覆盖。")
     if config.mode == "remix_then_upload":
         removed = clear_images_in_dir(dest)
         if removed:
             emit(f"已清空输出目录里上次留下的 {removed} 张图，本轮二创数量会和源图一致。")
-        emit("二创会按你填的提示词改图，不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
+        emit("二创会按你填的提示词改图，并锁定任务页选的分类。不会强制黄昏；源图若是日落，请在提示词里写清要白天、阴天或夜晚。")
 
     def cancelled() -> bool:
         if stop_check and stop_check():
@@ -100,24 +104,49 @@ def prepare_images(
             assert remix_client is not None
             emit(f"正在二创 {label} …")
             try:
-                remixed = remix_client.remix_image(image, dest, title)
+                remixed = remix_client.remix_image(image, dest, title, category=chosen)
             except JobStopped:
                 emit("已停止，不再处理后续图片。")
                 raise
-            except ApiError as exc:
-                raise ApiError(
-                    f"{label} 二创失败。{friendly_error_message(str(exc))}"
-                ) from exc
-            prepared.append(PreparedImage(path=remixed, title=title))
+            except Exception as exc:  # noqa: BLE001 - skip this file and keep remixing the rest
+                skipped += 1
+                emit(f"跳过 {label}：{_brief_remix_failure(exc)}")
+                emit("已跳过这张，继续下一张")
+                remaining -= 1
+                if progress:
+                    progress(remaining, total)
+                continue
+            category = chosen or remix_client.last_source_category
+            prepared.append(PreparedImage(path=remixed, title=title, category=category))
             width, height = image_dimensions(remixed)
-            emit(f"已保存二创结果 {remixed.name}（标题：{title}，{width}×{height}）")
+            if category:
+                emit(f"已保存二创结果 {remixed.name}（标题：{title}，分类：{category}，{width}×{height}）")
+            else:
+                emit(f"已保存二创结果 {remixed.name}（标题：{title}，{width}×{height}）")
             remaining -= 1
             if progress:
                 progress(remaining, total)
         else:
-            prepared.append(PreparedImage(path=image, title=title))
-            emit(f"待上传：{image.name}（标题：{title}）")
+            prepared.append(PreparedImage(path=image, title=title, category=chosen))
+            if chosen:
+                emit(f"待上传：{image.name}（标题：{title}，分类：{chosen}）")
+            else:
+                emit(f"待上传：{image.name}（标题：{title}）")
+    if skipped:
+        emit(f"二创结束：成功 {len(prepared)} 张，跳过 {skipped} 张")
+    if config.mode == "remix_then_upload" and not prepared:
+        raise ApiError("全部二创都失败了，没有可上传的图片。失败原因在上方日志。")
     return prepared
+
+
+def _brief_remix_failure(exc: BaseException) -> str:
+    text = friendly_error_message(str(exc)).strip()
+    first = text.split("。", 1)[0].strip().rstrip(".")
+    if not first:
+        return "二创失败，已跳过"
+    if "已跳过" in first:
+        return first
+    return f"{first}，已跳过"
 
 
 def _has_api_secret(settings) -> bool:

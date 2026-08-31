@@ -71,6 +71,46 @@ async def test_job_uploads_one_account_then_switches(studio_home):
     assert waits == [0.01]
 
 
+async def test_upload_uses_detected_source_category(tmp_path: Path):
+    from wallpaper_studio.models import AccountBatch, PreparedImage
+    from wallpaper_studio.uploader import upload_batches
+
+    image = make_png(tmp_path / "soldier.png")
+    uploader = RecordingUploader()
+    batches = [
+        AccountBatch(
+            account=Account(username="demo1", password="123123", upload_count=1, interval_seconds=0),
+            images=[PreparedImage(path=image, title="soldier", category="军事")],
+        )
+    ]
+    uploaded, skipped = await upload_batches(
+        batches,
+        SiteProfile(category_value="风景"),
+        uploader=uploader,
+    )
+    assert uploaded == 1
+    assert skipped == 0
+    assert uploader.events[1] == ("upload", "demo1", "soldier.png", "soldier", "军事")
+
+
+async def test_job_uploads_chosen_task_category(studio_home):
+    config = AppConfig(
+        mode="upload_only",
+        upload_category="动漫",
+        api=ApiSettings(filename_prompt=""),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        site=SiteProfile(category_value="风景"),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(source_dir(config) / "hero.png")
+    uploader = RecordingUploader()
+    result = await run_job(config, uploader=uploader)
+    assert result["uploaded"] == 1
+    uploads = [event for event in uploader.events if event[0] == "upload"]
+    assert uploads[0][4] == "动漫"
+
+
 async def test_job_skips_failed_image_and_continues(studio_home):
     config = AppConfig(
         mode="upload_only",
@@ -152,6 +192,17 @@ def test_apply_defaults_keeps_custom_newxxt_key_and_fixes_accounts():
     assert all(item.username != "1252597792@qq.com" for item in updated.accounts)
 
 
+def test_apply_defaults_keeps_user_cqwall_account():
+    config = AppConfig.model_validate(
+        {
+            "accounts": [{"username": "me@qq.com", "password": "secret-pass", "upload_count": 2, "interval_seconds": 1}],
+        }
+    )
+    updated = apply_builtin_defaults(config)
+    assert [item.username for item in updated.accounts] == ["me@qq.com"]
+    assert updated.accounts[0].password == "secret-pass"
+
+
 def test_apply_defaults_migrates_old_newxxt_key_and_adds_chat_key():
     from wallpaper_studio.models import NEWXXT_API_KEY, NEWXXT_CHAT_KEY
 
@@ -175,31 +226,17 @@ def test_apply_defaults_switches_xbhuiz_to_newxxt():
     assert updated.api.api_key.startswith("sk-")
 
 
-def test_apply_defaults_migrates_baked_xmapi_to_newxxt():
-    from wallpaper_studio.models import XMAP_API_KEY
+def test_apply_defaults_migrates_other_hosts_to_newxxt():
+    from wallpaper_studio.models import NEWXXT_API_KEY
 
-    config = AppConfig.model_validate({"api": {"base_url": "https://xmapi.site", "api_key": XMAP_API_KEY}})
+    config = AppConfig.model_validate({"api": {"base_url": "https://xmapi.site", "api_key": "sk-custom-other"}})
     updated = apply_builtin_defaults(config)
     assert updated.api.base_url == "https://api.newxxt.top"
-    assert updated.api.api_key.startswith("sk-")
-
-
-def test_apply_defaults_keeps_custom_xmapi_and_adds_newxxt_titles():
-    config = AppConfig.model_validate(
-        {"api": {"base_url": "https://xmapi.site", "api_key": "sk-custom-xmapi"}}
-    )
-    updated = apply_builtin_defaults(config)
-    assert updated.api.base_url == "https://api.newxxt.top"
-    assert updated.api.api_key == "sk-custom-xmapi"
+    assert updated.api.api_key == NEWXXT_API_KEY
     assert updated.api.filename_model == "gpt-5.4-mini"
 
 
-def test_match_relay_preset_by_host():
-    from wallpaper_studio.models import AIPIX_API_BASE, ApiSettings, match_relay_preset
-
-    assert match_relay_preset(ApiSettings(base_url=AIPIX_API_BASE)) == "aipixapi"
-    assert match_relay_preset(ApiSettings(base_url="https://xmapi.site/v1")) == "xmapi"
-    assert match_relay_preset(ApiSettings()) == "newxxt"
+def test_effective_remix_prompt_keeps_user_text():
     settings = AppConfig.model_validate({"api": {"remix_prompt": "  "}}).api
     assert settings.remix_prompt == DEFAULT_REMIX_PROMPT
     assert "禁止原样" in settings.remix_prompt
@@ -207,6 +244,8 @@ def test_match_relay_preset_by_host():
     assert effective_remix_prompt("Restyle this image as a desktop wallpaper.") == DEFAULT_REMIX_PROMPT
     custom = "把山改成雪景，光线更冷。"
     assert effective_remix_prompt(custom) == custom
+    copy_prompt = "参考这张图，直接把原图做出来。Refer to this image and directly create the original image."
+    assert effective_remix_prompt(copy_prompt) == copy_prompt
 
 
 def test_apply_defaults_upgrades_cinematic_remix_prompt():

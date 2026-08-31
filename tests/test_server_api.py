@@ -12,10 +12,17 @@ def test_home_and_config_roundtrip(studio_home):
     home = client.get("/")
     assert home.status_code == 200
     assert "壁纸工坊" in home.text
+    assert 'id="upload_category"' in home.text
+    assert "本轮分类" in home.text
     js = client.get("/static/studio.js")
     assert js.status_code == 200
     assert "function renderLogs" in js.text
     assert "function notify" in js.text
+    assert "function collectAccounts" in js.text
+    assert "secretStore" in js.text
+    assert "btn-save" in home.text
+    assert "function canonicalCategory" in js.text
+    assert "upload_category" in js.text
     assert "function appendLog" in js.text
     assert "正在发送停止请求" in js.text
     assert '$("btn-stop").disabled' not in js.text
@@ -28,12 +35,14 @@ def test_home_and_config_roundtrip(studio_home):
     assert state.status_code == 200
     payload = state.json()["config"]
     payload["mode"] = "upload_only"
+    payload["upload_category"] = "动漫"
     payload["accounts"] = [
         {"username": "demo1", "password": "123123", "upload_count": 2, "interval_seconds": 1}
     ]
     saved = client.post("/api/config", json=payload)
     assert saved.status_code == 200
     assert saved.json()["config"]["accounts"][0]["username"] == "demo1"
+    assert saved.json()["config"]["upload_category"] == "动漫"
 
 
 def test_config_clears_image_size_limits(studio_home):
@@ -81,6 +90,19 @@ def test_empty_accounts_are_restored_to_default(studio_home):
     assert state["accounts"][0]["username"] == "ari-ihcot@linshi-mail.com"
 
 
+def test_saved_user_account_is_not_replaced_by_demo(studio_home):
+    reset_demo_sessions()
+    client = TestClient(create_app())
+    payload = client.get("/api/state").json()["config"]
+    payload["accounts"] = [
+        {"username": "me@qq.com", "password": "secret-pass", "upload_count": 2, "interval_seconds": 1}
+    ]
+    assert client.post("/api/config", json=payload).status_code == 200
+    state = client.get("/api/state").json()["config"]
+    assert [item["username"] for item in state["accounts"]] == ["me@qq.com"]
+    assert state["accounts"][0]["password"] == "secret-pass"
+
+
 def test_blank_remix_prompt_is_saved_as_default(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
@@ -93,15 +115,12 @@ def test_blank_remix_prompt_is_saved_as_default(studio_home):
     assert client.get("/api/state").json()["config"]["api"]["remix_prompt"] == prompt
 
 
-def test_state_includes_relay_presets(studio_home):
+def test_state_locks_api_host_to_newxxt(studio_home):
     reset_demo_sessions()
     client = TestClient(create_app())
     state = client.get("/api/state").json()
-    presets = state["relay_presets"]
-    assert presets["newxxt"]["base_url"] == "https://api.newxxt.top"
-    assert presets["aipixapi"]["base_url"] == "https://www.aipixapi.art"
-    assert presets["aipixapi"]["filename_base_url"] == "https://api.newxxt.top"
-    assert presets["xmapi"]["filename_model"] == "gpt-5.4-mini"
+    assert "relay_presets" not in state
+    assert state["config"]["api"]["base_url"] == "https://api.newxxt.top"
 
 
 def test_default_state_includes_cqwall_and_newxxt(studio_home):
@@ -262,6 +281,7 @@ def test_stop_cancels_a_running_prepare_loop(studio_home, monkeypatch):
     save_config(
         AppConfig(
             mode="upload_only",
+            upload_category="风景",
             api=ApiSettings(filename_prompt=""),
             paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
             accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
