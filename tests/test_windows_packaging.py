@@ -14,6 +14,8 @@ def test_windows_packaging_files_exist():
     assert "PLAYWRIGHT_BROWSERS_PATH" in workflow
     assert "playwright install chromium" in workflow
     assert "python312.dll" in workflow
+    assert "_socket.pyd" in workflow
+    assert "Smoke-test Windows exe" in workflow
     assert "open-studio.bat" in workflow
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
     assert ".local-browsers" in spec
@@ -22,6 +24,9 @@ def test_windows_packaging_files_exist():
     assert "_windows_runtime_binaries" in spec
     assert "vcruntime140.dll" in spec
     assert "python312.dll" in spec
+    assert "_socket.pyd" in spec
+    assert '"_socket"' in spec
+    assert "multiprocessing.freeze_support" in (root / "run.py").read_text(encoding="utf-8")
     assert "webview" in spec
     assert "wallpaper_studio.desktop" in spec
     project = (root / "pyproject.toml").read_text(encoding="utf-8")
@@ -60,6 +65,7 @@ def test_windows_packaging_files_exist():
     assert "access_log=False" in launcher
     readme = (root / "packaging" / "exe-readme.txt").read_text(encoding="utf-8")
     assert "python312.dll" in readme
+    assert "_socket.pyd" in (root / "packaging" / "open-studio.bat").read_text(encoding="utf-8")
     assert "vc_redist.x64.exe" in readme
     assert "程序窗口" in readme
     assert "WebView2" in readme

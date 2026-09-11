@@ -23,4 +23,14 @@ if not exist "%~dp0_internal\python312.dll" (
   exit /b 1
 )
 
+if not exist "%~dp0_internal\_socket.pyd" (
+  echo 缺少运行文件：_internal\_socket.pyd
+  echo.
+  echo 这是旧包或不完整解压。请删掉整个 WallpaperStudio 文件夹，
+  echo 再重新下载 GitHub Actions 里最新一次 Build client app 的 client-Windows。
+  echo.
+  pause
+  exit /b 1
+)
+
 start "" "%~dp0WallpaperStudio.exe"

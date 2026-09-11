@@ -17,6 +17,7 @@
 - 不要只拷一个 exe，同目录的其它文件也要一起带走
 - 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）
 - 如果弹出 Failed to load Python DLL / python312.dll / 找不到指定的模块：先删掉整个 WallpaperStudio 文件夹，再解压 GitHub 的 client-Windows。exe 必须和 _internal 在同一层。也可以先双击「打开壁纸工坊.bat」检查。还不行就安装 VC++：https://aka.ms/vs/17/release/vc_redist.x64.exe ，并看杀毒软件有没有隔离 dll
+- 如果弹出 pyi_rth_multiprocessing / No module named '_socket' 或 socket：同样是旧包或不完整解压。删掉整个文件夹后，重新下载最新一次绿色勾的 client-Windows，不要只用旧 exe 覆盖
 - 配置和图片在 exe 旁边的 data 文件夹。源图请放进 data\source（或「文件夹」页显示的实际读取目录），子文件夹里的图也会算
 - 同一台电脑只能开一份。如果再双击 exe 没有新窗口，多半已经在跑，请到任务栏点「壁纸工坊」
 - 如果提示已经在运行，但看不到窗口：打开任务管理器，结束 WallpaperStudio.exe，再重新双击

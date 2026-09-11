@@ -52,8 +52,35 @@ jobs:
           exe = Path("dist/WallpaperStudio/WallpaperStudio.exe")
           assert exe.is_file(), exe
           assert (folder / "python312.dll").is_file(), folder
-          names = {path.name.lower() for path in folder.glob("*.dll")}
-          assert "vcruntime140.dll" in names, sorted(names)[:40]
+          pyds = {path.name.lower() for path in folder.glob("*.pyd")}
+          dlls = {path.name.lower() for path in folder.glob("*.dll")}
+          missing = [name for name in ("_socket.pyd", "select.pyd") if name not in pyds]
+          assert not missing, (missing, "pyds", sorted(pyds)[:80], "dlls", sorted(dlls)[:40])
+          assert "vcruntime140.dll" in dlls, sorted(dlls)[:40]
+      - name: Smoke-test Windows exe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Join-Path (Get-Location) "dist/WallpaperStudio/WallpaperStudio.exe"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--no-browser" -PassThru
+          $ok = $false
+          try {
+            for ($i = 0; $i -lt 40; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/api/health
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {}
+              if ($proc.HasExited) { break }
+            }
+            if (-not $ok) {
+              Get-ChildItem "dist/WallpaperStudio/_internal" -Filter *.pyd | Select-Object -ExpandProperty Name
+              if ($proc.HasExited) { throw "WallpaperStudio.exe exited with code $($proc.ExitCode) before /api/health" }
+              throw "WallpaperStudio.exe did not answer /api/health"
+            }
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
 
       - name: Stage delivery folder
         shell: bash

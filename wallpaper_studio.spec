@@ -11,7 +11,13 @@ readme = root / "packaging" / "exe-readme.txt"
 
 
 def _windows_runtime_binaries() -> list[tuple[str, str]]:
-    """Ship python312.dll plus the VC runtime it needs to LoadLibrary."""
+    """Ship python312.dll, VC runtime, and CPython stdlib extensions.
+
+    Frozen Windows builds import multiprocessing before app code. That path
+    loads socket.py, which needs _socket.pyd from Python's DLLs folder.
+    PyInstaller sometimes omits those .pyd files; the exe then dies with
+    pyi_rth_multiprocessing / No module named '_socket'.
+    """
     if sys.platform != "win32":
         return []
     names = (
@@ -20,6 +26,26 @@ def _windows_runtime_binaries() -> list[tuple[str, str]]:
         "vcruntime140.dll",
         "vcruntime140_1.dll",
         "msvcp140.dll",
+        "_socket.pyd",
+        "select.pyd",
+        "_ssl.pyd",
+        "_hashlib.pyd",
+        "_ctypes.pyd",
+        "_multiprocessing.pyd",
+        "_overlapped.pyd",
+        "_asyncio.pyd",
+        "_queue.pyd",
+        "_bz2.pyd",
+        "_lzma.pyd",
+        "_decimal.pyd",
+        "_uuid.pyd",
+        "_zoneinfo.pyd",
+        "_sqlite3.pyd",
+        "_elementtree.pyd",
+        "pyexpat.pyd",
+        "unicodedata.pyd",
+        "libffi-8.dll",
+        "sqlite3.dll",
     )
     directories = [
         Path(sys.base_prefix),
@@ -28,14 +54,24 @@ def _windows_runtime_binaries() -> list[tuple[str, str]]:
     ]
     found: list[tuple[str, str]] = []
     seen: set[str] = set()
+
+    def add(src: Path) -> None:
+        key = src.name.lower()
+        if key in seen or not src.is_file():
+            return
+        seen.add(key)
+        found.append((str(src), "."))
+
     for directory in directories:
         for name in names:
-            if name in seen:
-                continue
-            src = directory / name
-            if src.is_file():
-                found.append((str(src), "."))
-                seen.add(name)
+            add(directory / name)
+        if directory.name.lower() == "dlls" and directory.is_dir():
+            for src in directory.iterdir():
+                lower = src.name.lower()
+                if lower.endswith(".pyd") and not lower.startswith(("_tkinter", "tcl", "tk")):
+                    add(src)
+                elif lower.startswith(("libcrypto", "libssl", "libffi")) and lower.endswith(".dll"):
+                    add(src)
     return found
 
 
@@ -50,6 +86,17 @@ datas += [
 ]
 binaries = collect_dynamic_libs("playwright") + _windows_runtime_binaries()
 hiddenimports = [
+    "socket",
+    "_socket",
+    "select",
+    "selectors",
+    "ssl",
+    "_ssl",
+    "multiprocessing",
+    "multiprocessing.connection",
+    "multiprocessing.context",
+    "multiprocessing.reduction",
+    "multiprocessing.spawn",
     "uvicorn.logging",
     "uvicorn.lifespan.on",
     "uvicorn.loops.auto",

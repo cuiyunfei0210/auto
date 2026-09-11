@@ -50,6 +50,8 @@
 
 如果弹出 **Failed to load Python DLL / python312.dll / 找不到指定的模块**：说明 `_internal` 不完整。请删掉桌面上的整个 `WallpaperStudio` 文件夹，重新解压 `client-Windows`，保证 exe 和 `_internal` 在同一层。不要只拷 exe，也不要从压缩包里直接打开。还不行就安装 [VC++ 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)。
 
+如果弹出 **pyi_rth_multiprocessing / No module named '_socket'**（或 `socket`）：也是旧包或缺文件。同样删掉整个文件夹，再下载最新一次绿色勾的 `client-Windows`。解压后 `_internal` 里应有 `_socket.pyd`。
+
 **一定要先解压整个文件夹**，再双击 exe。不要直接在压缩包里打开，也不要从 WinRAR 的临时目录运行。  
 如果提示找不到 `chrome-headless-shell.exe`，说明用的是旧包（没带浏览器）。请重新下载最新一次绿色勾的 `client-Windows`。
 
