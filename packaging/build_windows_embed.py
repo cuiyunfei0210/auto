@@ -92,11 +92,15 @@ def build(dest: Path | None = None) -> Path:
     subprocess.check_call([str(python), str(get_pip), "--no-warn-script-location"])
     get_pip.unlink(missing_ok=True)
     subprocess.check_call(
+        [str(python), "-m", "pip", "install", "--upgrade", "--no-warn-script-location", "setuptools", "wheel"]
+    )
+    subprocess.check_call(
         [
             str(python),
             "-m",
             "pip",
             "install",
+            "--no-build-isolation",
             "--no-warn-script-location",
             str(ROOT),
         ]

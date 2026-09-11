@@ -32,8 +32,8 @@ def test_windows_packaging_files_exist():
     assert "pythonw.exe" in launcher_cs
     assert "LOAD_WITH_ALTERED_SEARCH_PATH" in launcher_cs
     embed = (root / "packaging" / "build_windows_embed.py").read_text(encoding="utf-8")
-    assert 'EMBED_VERSION = "3.12.10"' in embed
-    assert "embed-amd64.zip" in embed
+    assert "setuptools" in embed
+    assert "no-build-isolation" in embed
     assert "multiprocessing.freeze_support" in (root / "run.py").read_text(encoding="utf-8")
     project = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert "pywebview" in project
