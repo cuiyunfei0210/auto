@@ -45,6 +45,8 @@ def friendly_error_message(raw: str) -> str:
         )
     if text.startswith(("生图 Key", "中转站", "当前", "这个中转站", "全部二创", "文生图通道", "改图接口")):
         return text
+    if "invalid api key" in lowered or "incorrect api key" in lowered:
+        return "中转站说这组 API Key 无效。请检查对话 Key，或到 newxxt 后台重新复制。"
     if "not supported by any configured account" in lowered or "model_not_found" in lowered:
         return (
             "这个中转站的 Key 组没有该模型。"

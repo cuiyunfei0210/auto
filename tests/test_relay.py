@@ -33,7 +33,10 @@ def _payload_image_url(body: dict) -> str:
     return str(image or "")
 
 
-def test_friendly_message_for_chat_group_cannot_generate_images():
+def test_friendly_message_for_invalid_api_key():
+    text = friendly_error_message("Invalid API key")
+    assert "API Key 无效" in text
+    assert friendly_error_message(text) == text
     text = friendly_error_message("Image generation is not enabled for this group")
     assert "对话组" in text
     assert "生图" in text
