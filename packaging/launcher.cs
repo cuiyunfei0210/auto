@@ -72,7 +72,14 @@ internal static class Program
         psi.EnvironmentVariables["WALLPAPER_STUDIO_PACKAGED"] = "1";
         psi.EnvironmentVariables["WALLPAPER_STUDIO_ROOT"] = dir;
         psi.EnvironmentVariables["PATH"] = dir + ";" + path;
-        psi.Arguments = Quote(script) + AppendArgs(args);
+        psi.Arguments = BuildArgs(args);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "launcher.log"), psi.FileName + " " + psi.Arguments);
+        }
+        catch
+        {
+        }
 
         Process child;
         try
@@ -109,16 +116,24 @@ internal static class Program
         return "\"" + value.Replace("\"", "\\\"") + "\"";
     }
 
-    private static string AppendArgs(string[] args)
+    private static string BuildArgs(string[] args)
     {
-        if (args == null || args.Length == 0)
+        var sb = new StringBuilder("run.py");
+        if (args == null)
         {
-            return "";
+            return sb.ToString();
         }
-        var sb = new StringBuilder();
         foreach (string arg in args)
         {
-            sb.Append(' ').Append(Quote(arg));
+            sb.Append(' ');
+            if (arg.IndexOfAny(new[] { ' ', '"' }) >= 0)
+            {
+                sb.Append(Quote(arg));
+            }
+            else
+            {
+                sb.Append(arg);
+            }
         }
         return sb.ToString();
     }

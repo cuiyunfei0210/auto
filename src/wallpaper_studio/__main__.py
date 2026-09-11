@@ -138,7 +138,9 @@ def main() -> None:
 
 
 def _redirect_logs() -> None:
-    if not getattr(sys, "frozen", False):
+    from wallpaper_studio.paths import is_frozen
+
+    if not is_frozen():
         return
     try:
         from wallpaper_studio.storage import data_dir
