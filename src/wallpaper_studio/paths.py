@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 
 def is_frozen() -> bool:
-    return bool(getattr(sys, "frozen", False))
+    if getattr(sys, "frozen", False):
+        return True
+    if os.environ.get("WALLPAPER_STUDIO_PACKAGED") == "1":
+        return True
+    executable = Path(sys.executable).resolve()
+    parent = executable.parent
+    if executable.name.lower() in {"python.exe", "pythonw.exe"} and (parent / "python312.dll").is_file() and (parent / "run.py").is_file():
+        return True
+    return False
 
 
 def is_archive_temp_path(path: Path | None = None) -> bool:
@@ -37,6 +46,8 @@ def archive_temp_warning(path: Path | None = None) -> str | None:
 
 def app_root() -> Path:
     """Directory that owns data/, start.bat, and the Windows exe."""
+    if os.environ.get("WALLPAPER_STUDIO_ROOT"):
+        return Path(os.environ["WALLPAPER_STUDIO_ROOT"]).resolve()
     if is_frozen():
         return Path(sys.executable).resolve().parent
     repo = Path(__file__).resolve().parents[2]

@@ -116,6 +116,33 @@ def runtime_binary_tuples() -> list[tuple[str, str]]:
     return [(str(path), ".") for path in iter_runtime_files()]
 
 
+def copy_crt_dlls(app_dir: Path) -> list[Path]:
+    """Copy VC++/UCRT DLLs into *app_dir* without replacing python312.dll."""
+    app_dir = Path(app_dir)
+    app_dir.mkdir(parents=True, exist_ok=True)
+    copied: list[Path] = []
+    for src in iter_runtime_files():
+        if src.suffix.lower() != ".dll":
+            continue
+        lower = src.name.lower()
+        if lower.startswith("python"):
+            continue
+        if not (
+            lower.startswith(("vcruntime", "msvcp", "concrt", "vccorlib", "ucrtbase", "api-ms-win-crt-"))
+            or lower.startswith("api-ms-win-crt-")
+        ):
+            continue
+        dest = app_dir / src.name
+        try:
+            if dest.exists() and dest.stat().st_size >= max(1, src.stat().st_size):
+                continue
+            shutil.copy2(src, dest)
+            copied.append(dest)
+        except OSError:
+            continue
+    return copied
+
+
 def copy_runtime_into(app_dir: Path) -> list[Path]:
     """Copy runtime files into ``_internal`` and VC/Python DLLs next to the exe."""
     app_dir = Path(app_dir)
@@ -132,7 +159,6 @@ def copy_runtime_into(app_dir: Path) -> list[Path]:
                 if dest.exists() and dest.stat().st_size == src.stat().st_size:
                     if dest.resolve() == src.resolve():
                         continue
-                    # Keep a known-good copy even if a 0-byte placeholder exists.
                     if dest.stat().st_size >= (MIN_PYTHON_DLL_BYTES if src.name.lower() == "python312.dll" else 1):
                         continue
                 shutil.copy2(src, dest)

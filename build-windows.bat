@@ -28,19 +28,11 @@ if errorlevel 1 (
   if errorlevel 1 goto :fail
 )
 
-echo [1/3] 安装打包工具 PyInstaller...
-"%PYEXE%" -m pip install -U pyinstaller
+echo [1/2] 使用官方嵌入式 Python 打包（不再用 PyInstaller 的 _internal）...
+"%PYEXE%" "%~dp0packaging\build_windows_embed.py"
 if errorlevel 1 goto :fail
 
-echo [2/3] 开始打包（不内置 Chromium，上传时用系统 Edge）...
-"%PYEXE%" -m PyInstaller --noconfirm --clean wallpaper_studio.spec
-if errorlevel 1 goto :fail
-
-echo [3/3] 写入使用说明、VC 运行库和启动检查...
-"%PYEXE%" "%~dp0packaging\windows_runtime.py" "%~dp0dist\WallpaperStudio"
-if errorlevel 1 goto :fail
-copy /Y "%~dp0packaging\exe-readme.txt" "%~dp0dist\WallpaperStudio\使用说明.txt" >nul
-copy /Y "%~dp0packaging\open-studio.bat" "%~dp0dist\WallpaperStudio\打开壁纸工坊.bat" >nul
+echo [2/2] 完成
 
 echo.
 echo ========================================

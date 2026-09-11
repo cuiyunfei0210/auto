@@ -32,33 +32,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install PyInstaller and app
-        run: python -m pip install --upgrade pip pyinstaller && python -m pip install -e .
-      - name: Build executable
-        run: python -m PyInstaller --noconfirm wallpaper_studio.spec
-      - name: Copy Windows CRT next to python312.dll
+      - name: Build Windows portable app
         if: runner.os == 'Windows'
-        run: python packaging/windows_runtime.py dist/WallpaperStudio
+        run: python packaging/build_windows_embed.py
+      - name: Install PyInstaller and app
+        if: runner.os != 'Windows'
+        run: python -m pip install --upgrade pip pyinstaller && python -m pip install -e .
+      - name: Build Unix executable
+        if: runner.os != 'Windows'
+        run: python -m PyInstaller --noconfirm wallpaper_studio.spec
       - name: Confirm Windows Python runtime is bundled
         if: runner.os == 'Windows'
         shell: python
         run: |
           from pathlib import Path
-          folder = Path("dist/WallpaperStudio/_internal")
           app = Path("dist/WallpaperStudio")
           exe = app / "WallpaperStudio.exe"
-          py = folder / "python312.dll"
+          py = app / "python312.dll"
+          pythonw = app / "pythonw.exe"
           assert exe.is_file(), exe
+          assert pythonw.is_file(), pythonw
+          assert (app / "run.py").is_file(), app
           assert py.is_file() and py.stat().st_size >= 1_000_000, (py, py.stat().st_size if py.is_file() else 0)
-          pyds = {path.name.lower() for path in folder.glob("*.pyd")}
-          dlls = {path.name.lower() for path in folder.glob("*.dll")}
-          beside = {path.name.lower() for path in app.glob("*.dll")}
-          missing = [name for name in ("_socket.pyd", "select.pyd") if name not in pyds]
-          assert not missing, (missing, "pyds", sorted(pyds)[:80], "dlls", sorted(dlls)[:40])
-          for name in ("vcruntime140.dll", "vcruntime140_1.dll"):
-              assert name in dlls or name in beside, (name, sorted(dlls)[:40], sorted(beside)[:40])
-          chrome = list(folder.rglob("chrome.exe")) + list(folder.rglob("chrome-headless-shell.exe"))
+          dlls = {path.name.lower() for path in app.glob("*.dll")}
+          assert "vcruntime140.dll" in dlls, sorted(dlls)[:40]
+          chrome = list(app.rglob("chrome.exe")) + list(app.rglob("chrome-headless-shell.exe"))
           assert not chrome, ("do not bundle Chromium; Windows uses system Edge", chrome[:3])
+          assert not (app / "_internal" / "python312.dll").exists()
       - name: Smoke-test Windows exe
         if: runner.os == 'Windows'
         shell: pwsh
@@ -73,15 +73,15 @@ jobs:
                 $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/api/health
                 if ($r.StatusCode -eq 200) { $ok = $true; break }
               } catch {}
-              if ($proc.HasExited) { break }
+              if ($proc.HasExited -and $proc.ExitCode -ne 0) { break }
             }
             if (-not $ok) {
-              Get-ChildItem "dist/WallpaperStudio/_internal" -Filter *.pyd | Select-Object -ExpandProperty Name
+              Get-ChildItem "dist/WallpaperStudio" -Filter python*.dll | Select-Object Name, Length
               if ($proc.HasExited) { throw "WallpaperStudio.exe exited with code $($proc.ExitCode) before /api/health" }
               throw "WallpaperStudio.exe did not answer /api/health"
             }
           } finally {
-            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+            if ($proc -and -not $proc.HasExited) { taskkill /PID $proc.Id /T /F | Out-Null }
           }
 
       - name: Stage delivery folder

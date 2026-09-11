@@ -8,17 +8,18 @@ def test_windows_packaging_files_exist():
     assert (root / "packaging" / "exe-readme.txt").exists()
     assert (root / "packaging" / "open-studio.bat").exists()
     assert (root / "packaging" / "windows_runtime.py").exists()
+    assert (root / "packaging" / "build_windows_embed.py").exists()
+    assert (root / "packaging" / "launcher.cs").exists()
     assert (root / "wallpaper_studio.spec").exists()
     workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
     assert "name: Build client app" in workflow
     assert "windows-latest" in workflow
     assert "playwright install --with-deps chromium" in workflow
     assert "python312.dll" in workflow
-    assert "_socket.pyd" in workflow
-    assert "vcruntime140_1.dll" in workflow
+    assert "pythonw.exe" in workflow
+    assert "build_windows_embed.py" in workflow
     assert "do not bundle Chromium" in workflow
     assert "include-hidden-files: true" in workflow
-    assert "windows_runtime.py" in workflow
     assert "Smoke-test Windows exe" in workflow
     assert "open-studio.bat" in workflow
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
@@ -26,21 +27,20 @@ def test_windows_packaging_files_exist():
     assert "Do not ship Playwright" in spec
     assert "console=False" in spec
     assert "_windows_runtime" in spec
-    assert "vcruntime140.dll" in spec or "windows_runtime" in spec
-    assert "python312.dll" in spec or "windows_runtime" in spec
-    assert "pw-browsers" not in spec
-    assert "_socket.pyd" in spec or "STDLIB_PYD_NAMES" in (root / "packaging" / "windows_runtime.py").read_text(encoding="utf-8")
-    assert '"_socket"' in spec
+    launcher_cs = (root / "packaging" / "launcher.cs").read_text(encoding="utf-8")
+    assert "SetDllDirectory" in launcher_cs
+    assert "pythonw.exe" in launcher_cs
+    assert "LOAD_WITH_ALTERED_SEARCH_PATH" in launcher_cs
+    embed = (root / "packaging" / "build_windows_embed.py").read_text(encoding="utf-8")
+    assert 'EMBED_VERSION = "3.12.10"' in embed
+    assert "embed-amd64.zip" in embed
     assert "multiprocessing.freeze_support" in (root / "run.py").read_text(encoding="utf-8")
-    assert "webview" in spec
-    assert "wallpaper_studio.desktop" in spec
     project = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert "pywebview" in project
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
     assert "WallpaperStudio.exe" in text
-    assert "Edge" in text
-    assert "windows_runtime.py" in text
-    assert "打开壁纸工坊.bat" in text
+    assert "build_windows_embed.py" in text
+    assert "嵌入式 Python" in text
     ui = (root / "src" / "wallpaper_studio" / "web" / "studio.js").read_text(encoding="utf-8")
     assert "function renderLogs" in ui
     assert "function notify(" in ui
@@ -70,8 +70,8 @@ def test_windows_packaging_files_exist():
     readme = (root / "packaging" / "exe-readme.txt").read_text(encoding="utf-8")
     assert "python312.dll" in readme
     launcher_bat = (root / "packaging" / "open-studio.bat").read_text(encoding="utf-8")
-    assert "_socket.pyd" in launcher_bat
-    assert "vcruntime140.dll" in launcher_bat
+    assert "pythonw.exe" in launcher_bat
+    assert "Failed to load Python DLL" in launcher_bat
     assert "Unblock-File" in launcher_bat
     runtime = (root / "packaging" / "windows_runtime.py").read_text(encoding="utf-8")
     assert "vcruntime140_1.dll" in runtime
