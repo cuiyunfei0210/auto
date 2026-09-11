@@ -12,24 +12,23 @@ def test_windows_packaging_files_exist():
     workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
     assert "name: Build client app" in workflow
     assert "windows-latest" in workflow
-    assert "PLAYWRIGHT_BROWSERS_PATH" in workflow
-    assert "playwright install chromium" in workflow
+    assert "playwright install --with-deps chromium" in workflow
     assert "python312.dll" in workflow
     assert "_socket.pyd" in workflow
     assert "vcruntime140_1.dll" in workflow
-    assert "pw-browsers" in workflow
+    assert "do not bundle Chromium" in workflow
     assert "include-hidden-files: true" in workflow
     assert "windows_runtime.py" in workflow
     assert "Smoke-test Windows exe" in workflow
     assert "open-studio.bat" in workflow
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
     assert ".local-browsers" in spec
-    assert 'sys.platform != "darwin"' in spec
+    assert "Do not ship Playwright" in spec
     assert "console=False" in spec
     assert "_windows_runtime" in spec
     assert "vcruntime140.dll" in spec or "windows_runtime" in spec
     assert "python312.dll" in spec or "windows_runtime" in spec
-    assert "pw-browsers" in spec
+    assert "pw-browsers" not in spec
     assert "_socket.pyd" in spec or "STDLIB_PYD_NAMES" in (root / "packaging" / "windows_runtime.py").read_text(encoding="utf-8")
     assert '"_socket"' in spec
     assert "multiprocessing.freeze_support" in (root / "run.py").read_text(encoding="utf-8")
@@ -37,11 +36,9 @@ def test_windows_packaging_files_exist():
     assert "wallpaper_studio.desktop" in spec
     project = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert "pywebview" in project
-    workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
-    assert "if: runner.os != 'macOS'" in workflow
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
     assert "WallpaperStudio.exe" in text
-    assert "PLAYWRIGHT_BROWSERS_PATH" in text
+    assert "Edge" in text
     assert "windows_runtime.py" in text
     assert "打开壁纸工坊.bat" in text
     ui = (root / "src" / "wallpaper_studio" / "web" / "studio.js").read_text(encoding="utf-8")
@@ -83,7 +80,7 @@ def test_windows_packaging_files_exist():
     assert "vc_redist.x64.exe" in readme
     assert "程序窗口" in readme
     assert "WebView2" in readme
-    assert "系统浏览器" in readme
+    assert "系统 Edge" in readme or "Edge / Chrome" in readme
 
 
 def test_studio_js_has_valid_syntax():

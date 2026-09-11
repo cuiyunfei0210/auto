@@ -34,14 +34,7 @@ jobs:
           python-version: "3.12"
       - name: Install PyInstaller and app
         run: python -m pip install --upgrade pip pyinstaller && python -m pip install -e .
-      - name: Install Chromium into the Playwright package
-        if: runner.os != 'macOS'
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: "0"
-        run: python -m playwright install chromium
       - name: Build executable
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: "0"
         run: python -m PyInstaller --noconfirm wallpaper_studio.spec
       - name: Copy Windows CRT next to python312.dll
         if: runner.os == 'Windows'
@@ -64,9 +57,8 @@ jobs:
           assert not missing, (missing, "pyds", sorted(pyds)[:80], "dlls", sorted(dlls)[:40])
           for name in ("vcruntime140.dll", "vcruntime140_1.dll"):
               assert name in dlls or name in beside, (name, sorted(dlls)[:40], sorted(beside)[:40])
-          browsers = folder / "pw-browsers"
-          chrome = list(browsers.rglob("chrome.exe")) + list(browsers.rglob("chrome-headless-shell.exe"))
-          assert chrome, ("missing bundled Chromium under pw-browsers", browsers.exists())
+          chrome = list(folder.rglob("chrome.exe")) + list(folder.rglob("chrome-headless-shell.exe"))
+          assert not chrome, ("do not bundle Chromium; Windows uses system Edge", chrome[:3])
       - name: Smoke-test Windows exe
         if: runner.os == 'Windows'
         shell: pwsh

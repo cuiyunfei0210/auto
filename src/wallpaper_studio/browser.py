@@ -55,12 +55,13 @@ def configure_playwright_env() -> None:
 
 
 def chromium_launch_attempts(headless: bool, proxy: str | None) -> list[dict]:
-    """Try the bundled Chromium first, then Windows Edge/Chrome if that binary is missing."""
+    """Windows exe uses system Edge/Chrome so the zip stays ~70MB, not ~700MB."""
     base: dict = {"headless": headless}
     if proxy:
         base["proxy"] = {"server": proxy}
-    attempts = [dict(base)]
+    attempts: list[dict] = []
     if os.name == "nt":
         attempts.append({**base, "channel": "msedge"})
         attempts.append({**base, "channel": "chrome"})
+    attempts.append(dict(base))
     return attempts

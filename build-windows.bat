@@ -28,20 +28,15 @@ if errorlevel 1 (
   if errorlevel 1 goto :fail
 )
 
-echo [1/4] 安装打包工具 PyInstaller...
+echo [1/3] 安装打包工具 PyInstaller...
 "%PYEXE%" -m pip install -U pyinstaller
 if errorlevel 1 goto :fail
 
-echo [2/4] 把 Chromium 装进 Playwright 目录，便于打进 exe...
-set "PLAYWRIGHT_BROWSERS_PATH=0"
-"%PYEXE%" -m playwright install chromium
-if errorlevel 1 goto :fail
-
-echo [3/4] 开始打包，可能要几分钟，窗口不要关...
+echo [2/3] 开始打包（不内置 Chromium，上传时用系统 Edge）...
 "%PYEXE%" -m PyInstaller --noconfirm --clean wallpaper_studio.spec
 if errorlevel 1 goto :fail
 
-echo [4/4] 写入使用说明、VC 运行库和启动检查...
+echo [3/3] 写入使用说明、VC 运行库和启动检查...
 "%PYEXE%" "%~dp0packaging\windows_runtime.py" "%~dp0dist\WallpaperStudio"
 if errorlevel 1 goto :fail
 copy /Y "%~dp0packaging\exe-readme.txt" "%~dp0dist\WallpaperStudio\使用说明.txt" >nul

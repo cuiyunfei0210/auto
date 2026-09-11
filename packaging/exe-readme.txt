@@ -13,7 +13,7 @@
 注意
 - 发给别人时：把整个 WallpaperStudio 文件夹打成 zip 再发（_internal 必须在）。不要只发一个 exe。微信/QQ 常会拦 exe。对方解压到桌面后再打开。
 - 不要把你用过的 data\config.json 一起发出去也行；新版本会忽略别人电脑的 C:\Users\... 路径。若对方仍报错，让他删掉 data\config.json 再打开。
-- 上传壁纸站仍用内置 Chromium（在后台填登录表），操作界面在程序窗口里
+- 操作界面在程序窗口里。上传壁纸站用系统自带的 Edge / Chrome（不把 600MB 的 Chromium 打进包里）。没有 Edge 时请先安装 Microsoft Edge
 - 不要只拷一个 exe，同目录的其它文件也要一起带走
 - 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）
 - 如果弹出 Failed to load Python DLL / python312.dll / 找不到指定的模块：多半是缺 VC 运行库，或解压不完整。先删掉整个 WallpaperStudio 文件夹，再解压最新的 GitHub client-Windows（exe、python312.dll、vcruntime140.dll 必须和 _internal 在一起）。也可以先双击「打开壁纸工坊.bat」。还不行就安装 VC++：https://aka.ms/vs/17/release/vc_redist.x64.exe ，并看 360/Windows Defender 有没有隔离 dll

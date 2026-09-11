@@ -32,7 +32,11 @@ datas += [
     for src, dest in collect_data_files("playwright")
     if ".local-browsers" not in Path(src).as_posix()
 ]
-binaries = collect_dynamic_libs("playwright") + _windows_runtime.runtime_binary_tuples()
+binaries = [
+    (src, dest)
+    for src, dest in collect_dynamic_libs("playwright")
+    if ".local-browsers" not in Path(src).as_posix()
+] + _windows_runtime.runtime_binary_tuples()
 hiddenimports = [
     "socket",
     "_socket",
@@ -89,21 +93,12 @@ if sys.platform == "win32":
         _collect_pkg(_pkg)
 
 try:
-    import playwright
+    import playwright  # noqa: F401 — freeze-time check; Chromium itself is not shipped
 except ImportError as exc:  # pragma: no cover - build-time check
     raise SystemExit("Playwright is not installed in the build environment.") from exc
 
-# macOS PyInstaller codesign fails on Google Chrome for Testing.app.
-# Windows/Linux keep the bundled Chromium; macOS uses the system Chrome at runtime.
-if sys.platform != "darwin":
-    local_browsers = Path(playwright.__file__).resolve().parent / "driver" / "package" / ".local-browsers"
-    if not local_browsers.exists() or not any(local_browsers.iterdir()):
-        raise SystemExit(
-            "Playwright browsers are missing. Set PLAYWRIGHT_BROWSERS_PATH=0 and run: "
-            "python -m playwright install chromium"
-        )
-    # Non-hidden dest so GitHub artifact upload keeps Chromium (dotfolders are skipped).
-    datas.append((str(local_browsers), "pw-browsers"))
+# Do not ship Playwright's Chromium. It is ~600MB and makes client-Windows ~700MB.
+# Frozen Windows launches the installed Edge or Chrome instead.
 
 a = Analysis(
     [str(root / "run.py")],

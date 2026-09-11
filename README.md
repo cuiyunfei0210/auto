@@ -25,11 +25,11 @@
 
 1. 先安装 [Python 3.11+](https://www.python.org/downloads/windows/)，勾选 **Add python.exe to PATH**。
 2. 把整个项目文件夹放到电脑上，例如 `D:\wallpaper-studio`。
-3. （建议）**先双击一次** `打开壁纸工坊.bat`，等它装完。不是必须，但能提前把 Chromium 装好。
+3. （建议）**先双击一次** `打开壁纸工坊.bat`，等它装完（源码运行才会装 Chromium；打 exe 不打进浏览器）。
 4. **双击** `build-windows.bat`，等几分钟，不要关窗口。
 5. 结束后会自动打开文件夹  
    `项目目录\dist\WallpaperStudio\`
-6. **双击** `WallpaperStudio.exe`。会弹出程序窗口，不依赖系统浏览器。  
+6. **双击** `WallpaperStudio.exe`。会弹出程序窗口。上传时用系统 Edge / Chrome。  
    用完关窗口即可。
 
 以后日常使用只需要第 6 步。可以把 `dist\WallpaperStudio` 整个文件夹拷到桌面；**不要只拷一个 exe**，同目录文件要一起带着。
@@ -53,7 +53,7 @@
 如果弹出 **pyi_rth_multiprocessing / No module named '_socket'**（或 `socket`）：也是旧包或缺文件。同样删掉整个文件夹，再下载最新一次绿色勾的 `client-Windows`。解压后 `_internal` 里应有 `_socket.pyd`。
 
 **一定要先解压整个文件夹**，再双击 exe。不要直接在压缩包里打开，也不要从 WinRAR 的临时目录运行。  
-如果提示找不到 `chrome-headless-shell.exe`，说明用的是旧包（没带浏览器）。请重新下载最新一次绿色勾的 `client-Windows`。
+Windows 绿色包**不内置 Chromium**（否则有 600MB+）。上传用电脑上的 Edge 或 Chrome；Win10/11 一般已有 Edge。界面窗口用 WebView2，不是系统浏览器标签页。
 
 也可以在 Actions 页面右上角 **Run workflow** 手动再打一次包。
 Windows / Linux / macOS 都会各打一份。
