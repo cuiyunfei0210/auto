@@ -56,6 +56,7 @@ OLD_NEWXXT_API_KEYS = {
 }
 NEWXXT_API_KEY = "sk-ac87085afeb3d0fcf7574c86f021d5421d1f690b9dbcd1358aa9ec85ead98e29"
 NEWXXT_CHAT_KEY = "sk-dcaeb94ce3a1dd94713f43d844776a122d152585f34e7f136f62577cca3a618f"
+DEAD_NEWXXT_KEYS = frozenset(OLD_NEWXXT_API_KEYS) | {NEWXXT_CHAT_KEY}
 DEFAULT_CHAT_MODEL = "gpt-5.4-mini"
 DEFAULT_IMAGE_MODEL = "gpt-image-2"
 FALLBACK_TITLE_MODELS = (
@@ -209,13 +210,30 @@ def _relay_root(url: str) -> str:
     return text
 
 
+def _usable_relay_key(value: str | None) -> str:
+    text = (value or "").strip()
+    if not text or text in DEAD_NEWXXT_KEYS:
+        return ""
+    return text
+
+
 def title_api_settings(settings: ApiSettings) -> ApiSettings:
     """Titles can use a second newxxt Key while remix stays on the image Key."""
     base = (settings.filename_base_url or "").strip() or settings.base_url
-    key = (settings.filename_api_key or "").strip() or settings.api_key
+    key = _usable_relay_key(settings.filename_api_key) or _usable_relay_key(settings.api_key) or settings.api_key.strip()
     if _relay_root(base) == _relay_root(settings.base_url) and key == settings.api_key:
         return settings
     return settings.model_copy(update={"base_url": base, "api_key": key})
+
+
+def title_list_key_candidates(settings: ApiSettings) -> list[str]:
+    """Keys to try when asking the relay for chat models. Skip known-dead defaults."""
+    keys: list[str] = []
+    for raw in (settings.filename_api_key, settings.api_key):
+        key = _usable_relay_key(raw)
+        if key and key not in keys:
+            keys.append(key)
+    return keys
 
 
 def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
@@ -241,19 +259,19 @@ def apply_builtin_defaults(config: "AppConfig") -> "AppConfig":
         api["base_url"] = NEWXXT_API_BASE
         api["api_key"] = NEWXXT_API_KEY
         current_key = NEWXXT_API_KEY
-        if not str(api.get("filename_api_key") or "").strip():
-            api["filename_api_key"] = NEWXXT_CHAT_KEY
         api["filename_base_url"] = ""
         changed = True
     elif current_key in OLD_NEWXXT_API_KEYS:
         api["api_key"] = NEWXXT_API_KEY
         current_key = NEWXXT_API_KEY
-        if not str(api.get("filename_api_key") or "").strip():
-            api["filename_api_key"] = NEWXXT_CHAT_KEY
         changed = True
     elif not current_key:
         api["api_key"] = NEWXXT_API_KEY
         current_key = NEWXXT_API_KEY
+        changed = True
+    chat_key = str(api.get("filename_api_key") or "").strip()
+    if chat_key in DEAD_NEWXXT_KEYS:
+        api["filename_api_key"] = ""
         changed = True
     title_url = _relay_root(str(api.get("filename_base_url") or ""))
     if title_url and title_url != wanted_url:

@@ -207,27 +207,26 @@ async function loadTitleModels({ silent = true } = {}) {
     fillTitleModelSelect(models, selected);
     if (hint) {
       if (data && data.ok && data.source === "relay") {
-        hint.textContent = `已从中转站加载 ${data.models.length} 个对话模型。列表取决于当前对话 Key 的分组权限；后台开通更多模型后点「刷新模型」。`;
+        hint.textContent = `已从中转站加载 ${data.models.length} 个对话模型。列表取决于 Key 分组权限；后台开通更多模型后可再点「刷新模型」。`;
         hint.classList.remove("error");
       } else {
-        const reason = (data && data.error) ? data.error : "未能从中转站拉取模型";
-        hint.textContent = `${reason} 已显示常用备选，仍可手动选择后保存。`;
-        hint.classList.add("error");
+        hint.textContent = (data && data.hint)
+          || "常用对话模型都可选。点「刷新模型」可从中转站更新；选中的模型会用于写标题。";
+        hint.classList.remove("error");
       }
     }
     if (!silent && data && data.ok) {
       notify(`已加载 ${data.models.length} 个标题模型。`);
     } else if (!silent && data && !data.ok) {
-      notify(data.error || "刷新模型失败，已显示常用备选。");
+      notify("未能从中转站更新列表，已显示常用备选。直接选模型后保存即可，写标题仍用你选中的那一项。");
     }
   } catch (err) {
     fillTitleModelSelect(FALLBACK_TITLE_MODELS, selected);
-    const message = err && err.message ? err.message : String(err);
     if (hint) {
-      hint.textContent = `读取中转站模型列表失败：${message}。已显示常用备选。`;
-      hint.classList.add("error");
+      hint.textContent = "常用对话模型都可选。点「刷新模型」可从中转站更新；选中的模型会用于写标题。";
+      hint.classList.remove("error");
     }
-    if (!silent) notify(`刷新模型失败：${message}`);
+    if (!silent) notify("刷新模型失败，已显示常用备选。直接选模型后保存即可。");
   }
 }
 

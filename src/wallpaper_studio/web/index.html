@@ -210,7 +210,7 @@
               <button type="button" class="ghost" id="btn-refresh-title-models">刷新模型</button>
             </span>
           </label>
-          <p class="hint" id="title-model-hint">点「刷新模型」会向中转站 GET /v1/models，列出这组对话 Key 真正能用的模型。如果只有 gpt-5.4-mini，请到 newxxt 后台给该 Key 所在分组开通更多对话模型。</p>
+          <p class="hint" id="title-model-hint">常用对话模型都可选。点「刷新模型」会尝试从中转站更新列表；列表刷新失败不影响你选中的模型，保存后写标题仍用这一项。</p>
           <label>对话 API Key<input id="filename_api_key" type="password" autocomplete="new-password" placeholder="跟生图不是同一组 Key 时再填"></label>
           <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="按你的二创要求写，例如正午冷色调、更锐利。分类以任务页选择为准"></textarea></label>
           <p class="hint">会按你填的二创提示词生成。分类以任务页本轮选择为准：选了军事就是军事，选了动漫就是动漫，识图不会改分类。上传 CQwall 也用这个分类。</p>
@@ -229,6 +229,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260911a" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260911b" charset="utf-8"></script>
 </body>
 </html>

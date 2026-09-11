@@ -740,6 +740,19 @@ def test_title_api_settings_can_use_a_second_key():
     assert title_api_settings(ApiSettings(base_url="https://api.newxxt.top", api_key="sk-same")).api_key == "sk-same"
 
 
+def test_title_api_settings_skips_dead_builtin_chat_key():
+    from wallpaper_studio.models import NEWXXT_CHAT_KEY, title_api_settings, title_list_key_candidates
+
+    settings = ApiSettings(
+        base_url="https://api.newxxt.top",
+        api_key="sk-live-image",
+        filename_api_key=NEWXXT_CHAT_KEY,
+    )
+    assert title_api_settings(settings).api_key == "sk-live-image"
+    assert title_list_key_candidates(settings) == ["sk-live-image"]
+    assert title_list_key_candidates(ApiSettings(api_key=NEWXXT_CHAT_KEY, filename_api_key=NEWXXT_CHAT_KEY)) == []
+
+
 def test_generate_title_uses_filename_relay_host(tmp_path: Path):
     source = make_png(tmp_path / "night.png")
     seen: list[str] = []

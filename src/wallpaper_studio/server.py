@@ -18,6 +18,7 @@ from wallpaper_studio.models import (
     ApiSettings,
     AppConfig,
     title_api_settings,
+    title_list_key_candidates,
 )
 from wallpaper_studio.storage import (
     load_config,
@@ -29,7 +30,7 @@ from wallpaper_studio.files import empty_source_message, list_images
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
 from wallpaper_studio.sites import SITE_PRESETS
 from wallpaper_studio.paths import archive_temp_warning, web_dir
-from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message
+from wallpaper_studio.relay import RelayClient, friendly_error_message
 from wallpaper_studio.preflight import format_start_problems, start_problems
 
 WEB_DIR = web_dir()
@@ -230,57 +231,45 @@ def create_app() -> FastAPI:
             if isinstance(value, str) and value.strip():
                 api[key] = value
         settings = title_api_settings(ApiSettings.model_validate(api))
-        has_secret = bool(
-            settings.api_key.strip()
-            or (settings.username.strip() and settings.password)
-        )
         fallback = list(FALLBACK_TITLE_MODELS)
         current = str(api.get("filename_model") or "").strip()
         if current and current not in fallback and current.lower() not in {
             name.lower() for name in fallback
         }:
             fallback = [current, *fallback]
-        if not has_secret:
+        soft_hint = "常用对话模型可选。点「刷新模型」可从中转站更新列表；选中的模型会用于写标题，不取决于这次列表是否刷新成功。"
+        keys = title_list_key_candidates(settings)
+        if not keys:
             return JSONResponse(
                 {
                     "ok": False,
                     "source": "fallback",
                     "models": fallback,
-                    "error": "还没有填写对话 API Key。先填 Key 再刷新，列表来自中转站 GET /v1/models。",
+                    "error": None,
+                    "hint": soft_hint,
                 }
             )
-        try:
-            models = RelayClient(settings, timeout=20.0).list_title_models()
-        except ApiError as exc:
-            return JSONResponse(
-                {
-                    "ok": False,
-                    "source": "fallback",
-                    "models": fallback,
-                    "error": friendly_error_message(str(exc)),
-                }
-            )
-        except Exception as exc:  # noqa: BLE001
-            return JSONResponse(
-                {
-                    "ok": False,
-                    "source": "fallback",
-                    "models": fallback,
-                    "error": f"读取中转站模型列表失败：{exc}",
-                }
-            )
-        if current and current not in models:
-            models = [current, *models]
-        if not models:
-            return JSONResponse(
-                {
-                    "ok": False,
-                    "source": "fallback",
-                    "models": fallback,
-                    "error": "中转站没有返回可用的对话模型。请到 newxxt 后台给这组 Key 开通 gpt-5.4-mini 等对话模型。",
-                }
-            )
-        return JSONResponse({"ok": True, "source": "relay", "models": models, "error": None})
+        for key in keys:
+            try:
+                models = RelayClient(
+                    settings.model_copy(update={"api_key": key}),
+                    timeout=20.0,
+                ).list_title_models()
+            except Exception:  # noqa: BLE001 - listing is optional; titles still use the selected model
+                continue
+            if current and current not in models:
+                models = [current, *models]
+            if models:
+                return JSONResponse({"ok": True, "source": "relay", "models": models, "error": None, "hint": None})
+        return JSONResponse(
+            {
+                "ok": False,
+                "source": "fallback",
+                "models": fallback,
+                "error": None,
+                "hint": soft_hint,
+            }
+        )
 
     @app.post("/api/start")
     async def api_start() -> JSONResponse:

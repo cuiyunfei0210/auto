@@ -175,8 +175,10 @@ def test_title_models_endpoint_falls_back_when_relay_fails(studio_home, monkeypa
     assert data["ok"] is False
     assert data["source"] == "fallback"
     assert "gpt-5.4-mini" in data["models"]
-    assert "gpt-5.4" in data["models"]
-    assert data["error"]
+    assert "gpt-4o" in data["models"]
+    assert not data.get("error")
+    assert "可选" in (data.get("hint") or "")
+    assert "API Key 无效" not in (data.get("hint") or "")
 
 
 def test_state_includes_archive_warning_field(studio_home):
