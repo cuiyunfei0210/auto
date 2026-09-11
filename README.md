@@ -48,7 +48,7 @@
 4. 拉到页面底部 **Artifacts**，下载 `client-Windows`
 5. 解压后打开 `WallpaperStudio\WallpaperStudio.exe`（也可以先双击同目录的 `打开壁纸工坊.bat`）
 
-如果弹出 **Failed to load Python DLL / python312.dll / 找不到指定的模块**：说明 `_internal` 不完整。请删掉桌面上的整个 `WallpaperStudio` 文件夹，重新解压 `client-Windows`，保证 exe 和 `_internal` 在同一层。不要只拷 exe，也不要从压缩包里直接打开。还不行就安装 [VC++ 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)。
+如果弹出 **Failed to load Python DLL / python312.dll / 找不到指定的模块**：Windows 没能加载 Python 运行库。请删掉桌面上的整个 `WallpaperStudio` 文件夹，重新解压**最新一次**绿色勾的 `client-Windows`。新包会在 exe 旁边带上 `python312.dll` 和 `vcruntime140.dll`。不要只拷 exe，也不要从压缩包里直接打开。可先双击 `打开壁纸工坊.bat`。还不行就安装 [VC++ 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)，并检查 360 / Windows Defender 隔离区。
 
 如果弹出 **pyi_rth_multiprocessing / No module named '_socket'**（或 `socket`）：也是旧包或缺文件。同样删掉整个文件夹，再下载最新一次绿色勾的 `client-Windows`。解压后 `_internal` 里应有 `_socket.pyd`。
 

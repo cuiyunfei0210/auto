@@ -39,9 +39,19 @@ def configure_playwright_env() -> None:
         return
     os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
     meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
-    bundled = meipass / "playwright" / "driver" / "package" / ".local-browsers"
-    if bundled.exists():
-        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(bundled)
+    exe_dir = Path(sys.executable).resolve().parent
+    candidates = (
+        meipass / "pw-browsers",
+        exe_dir / "_internal" / "pw-browsers",
+        meipass / "playwright" / "driver" / "package" / ".local-browsers",
+    )
+    for bundled in candidates:
+        try:
+            if bundled.is_dir() and any(bundled.iterdir()):
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(bundled)
+                return
+        except OSError:
+            continue
 
 
 def chromium_launch_attempts(headless: bool, proxy: str | None) -> list[dict]:

@@ -18,8 +18,21 @@ def test_windows_launch_falls_back_to_edge_and_chrome(monkeypatch):
 
 
 def test_frozen_env_points_at_bundled_browsers(tmp_path, monkeypatch):
+    bundled = tmp_path / "pw-browsers"
+    bundled.mkdir()
+    (bundled / "chromium-1").mkdir()
+    monkeypatch.setattr("wallpaper_studio.browser.sys.frozen", True, raising=False)
+    monkeypatch.setattr("wallpaper_studio.browser.sys.executable", str(tmp_path / "WallpaperStudio.exe"), raising=False)
+    monkeypatch.setattr("wallpaper_studio.browser.sys._MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.delitem(os.environ, "PLAYWRIGHT_BROWSERS_PATH", raising=False)
+    configure_playwright_env()
+    assert os.environ["PLAYWRIGHT_BROWSERS_PATH"] == str(bundled)
+
+
+def test_frozen_env_falls_back_to_playwright_dotfolder(tmp_path, monkeypatch):
     bundled = tmp_path / "playwright" / "driver" / "package" / ".local-browsers"
     bundled.mkdir(parents=True)
+    (bundled / "chromium-1").mkdir()
     monkeypatch.setattr("wallpaper_studio.browser.sys.frozen", True, raising=False)
     monkeypatch.setattr("wallpaper_studio.browser.sys.executable", str(tmp_path / "WallpaperStudio.exe"), raising=False)
     monkeypatch.setattr("wallpaper_studio.browser.sys._MEIPASS", str(tmp_path), raising=False)

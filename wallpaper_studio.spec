@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -10,69 +10,17 @@ web = root / "src" / "wallpaper_studio" / "web"
 readme = root / "packaging" / "exe-readme.txt"
 
 
-def _windows_runtime_binaries() -> list[tuple[str, str]]:
-    """Ship python312.dll, VC runtime, and CPython stdlib extensions.
+def _load_windows_runtime():
+    path = root / "packaging" / "windows_runtime.py"
+    spec = importlib.util.spec_from_file_location("ws_windows_runtime", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-    Frozen Windows builds import multiprocessing before app code. That path
-    loads socket.py, which needs _socket.pyd from Python's DLLs folder.
-    PyInstaller sometimes omits those .pyd files; the exe then dies with
-    pyi_rth_multiprocessing / No module named '_socket'.
-    """
-    if sys.platform != "win32":
-        return []
-    names = (
-        "python312.dll",
-        "python3.dll",
-        "vcruntime140.dll",
-        "vcruntime140_1.dll",
-        "msvcp140.dll",
-        "_socket.pyd",
-        "select.pyd",
-        "_ssl.pyd",
-        "_hashlib.pyd",
-        "_ctypes.pyd",
-        "_multiprocessing.pyd",
-        "_overlapped.pyd",
-        "_asyncio.pyd",
-        "_queue.pyd",
-        "_bz2.pyd",
-        "_lzma.pyd",
-        "_decimal.pyd",
-        "_uuid.pyd",
-        "_zoneinfo.pyd",
-        "_sqlite3.pyd",
-        "_elementtree.pyd",
-        "pyexpat.pyd",
-        "unicodedata.pyd",
-        "libffi-8.dll",
-        "sqlite3.dll",
-    )
-    directories = [
-        Path(sys.base_prefix),
-        Path(sys.base_prefix) / "DLLs",
-        Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32",
-    ]
-    found: list[tuple[str, str]] = []
-    seen: set[str] = set()
 
-    def add(src: Path) -> None:
-        key = src.name.lower()
-        if key in seen or not src.is_file():
-            return
-        seen.add(key)
-        found.append((str(src), "."))
-
-    for directory in directories:
-        for name in names:
-            add(directory / name)
-        if directory.name.lower() == "dlls" and directory.is_dir():
-            for src in directory.iterdir():
-                lower = src.name.lower()
-                if lower.endswith(".pyd") and not lower.startswith(("_tkinter", "tcl", "tk")):
-                    add(src)
-                elif lower.startswith(("libcrypto", "libssl", "libffi")) and lower.endswith(".dll"):
-                    add(src)
-    return found
+_windows_runtime = _load_windows_runtime()
 
 
 datas = [(str(web), "wallpaper_studio/web")]
@@ -84,7 +32,7 @@ datas += [
     for src, dest in collect_data_files("playwright")
     if ".local-browsers" not in Path(src).as_posix()
 ]
-binaries = collect_dynamic_libs("playwright") + _windows_runtime_binaries()
+binaries = collect_dynamic_libs("playwright") + _windows_runtime.runtime_binary_tuples()
 hiddenimports = [
     "socket",
     "_socket",
@@ -154,7 +102,8 @@ if sys.platform != "darwin":
             "Playwright browsers are missing. Set PLAYWRIGHT_BROWSERS_PATH=0 and run: "
             "python -m playwright install chromium"
         )
-    datas.append((str(local_browsers), "playwright/driver/package/.local-browsers"))
+    # Non-hidden dest so GitHub artifact upload keeps Chromium (dotfolders are skipped).
+    datas.append((str(local_browsers), "pw-browsers"))
 
 a = Analysis(
     [str(root / "run.py")],
@@ -168,6 +117,15 @@ a = Analysis(
     excludes=[],
     noarchive=False,
 )
+if sys.platform == "win32":
+    # Analysis may strip UCRT/api-ms-win-crt as "system DLLs". Put them back.
+    have = {str(item[0]).replace("\\", "/").split("/")[-1].lower() for item in a.binaries}
+    for src, _dest in _windows_runtime.runtime_binary_tuples():
+        name = Path(src).name
+        if name.lower() in have:
+            continue
+        a.binaries.append((name, src, "BINARY"))
+        have.add(name.lower())
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -191,3 +149,5 @@ coll = COLLECT(
     upx=False,
     name="WallpaperStudio",
 )
+if sys.platform == "win32":
+    _windows_runtime.copy_runtime_into(Path(DISTPATH) / "WallpaperStudio")

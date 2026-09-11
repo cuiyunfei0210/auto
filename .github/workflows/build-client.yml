@@ -43,20 +43,30 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: "0"
         run: python -m PyInstaller --noconfirm wallpaper_studio.spec
+      - name: Copy Windows CRT next to python312.dll
+        if: runner.os == 'Windows'
+        run: python packaging/windows_runtime.py dist/WallpaperStudio
       - name: Confirm Windows Python runtime is bundled
         if: runner.os == 'Windows'
         shell: python
         run: |
           from pathlib import Path
           folder = Path("dist/WallpaperStudio/_internal")
-          exe = Path("dist/WallpaperStudio/WallpaperStudio.exe")
+          app = Path("dist/WallpaperStudio")
+          exe = app / "WallpaperStudio.exe"
+          py = folder / "python312.dll"
           assert exe.is_file(), exe
-          assert (folder / "python312.dll").is_file(), folder
+          assert py.is_file() and py.stat().st_size >= 1_000_000, (py, py.stat().st_size if py.is_file() else 0)
           pyds = {path.name.lower() for path in folder.glob("*.pyd")}
           dlls = {path.name.lower() for path in folder.glob("*.dll")}
+          beside = {path.name.lower() for path in app.glob("*.dll")}
           missing = [name for name in ("_socket.pyd", "select.pyd") if name not in pyds]
           assert not missing, (missing, "pyds", sorted(pyds)[:80], "dlls", sorted(dlls)[:40])
-          assert "vcruntime140.dll" in dlls, sorted(dlls)[:40]
+          for name in ("vcruntime140.dll", "vcruntime140_1.dll"):
+              assert name in dlls or name in beside, (name, sorted(dlls)[:40], sorted(beside)[:40])
+          browsers = folder / "pw-browsers"
+          chrome = list(browsers.rglob("chrome.exe")) + list(browsers.rglob("chrome-headless-shell.exe"))
+          assert chrome, ("missing bundled Chromium under pw-browsers", browsers.exists())
       - name: Smoke-test Windows exe
         if: runner.os == 'Windows'
         shell: pwsh
@@ -99,3 +109,4 @@ jobs:
         with:
           name: client-${{ runner.os }}
           path: delivery/
+          include-hidden-files: true
