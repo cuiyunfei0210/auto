@@ -58,6 +58,14 @@ NEWXXT_API_KEY = "sk-ac87085afeb3d0fcf7574c86f021d5421d1f690b9dbcd1358aa9ec85ead
 NEWXXT_CHAT_KEY = "sk-dcaeb94ce3a1dd94713f43d844776a122d152585f34e7f136f62577cca3a618f"
 DEFAULT_CHAT_MODEL = "gpt-5.4-mini"
 DEFAULT_IMAGE_MODEL = "gpt-image-2"
+FALLBACK_TITLE_MODELS = (
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.4",
+    "gpt-5.2",
+    "gpt-4o-mini",
+    "gpt-4o",
+)
 DEFAULT_FILENAME_PROMPT = (
     "Write a short English wallpaper title, max 18 characters, no file extension, no quotes."
 )

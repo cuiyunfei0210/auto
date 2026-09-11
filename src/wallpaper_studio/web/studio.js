@@ -34,6 +34,9 @@ function canonicalCategory(value) {
 }
 
 const FIXED_API_BASE = "https://api.newxxt.top";
+const FALLBACK_TITLE_MODELS = [
+  "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4", "gpt-5.2", "gpt-4o-mini", "gpt-4o",
+];
 const apiFields = [
   "api_key", "remix_chat_model", "remix_model", "filename_model",
   "filename_api_key", "remix_prompt", "filename_prompt", "image_size",
@@ -161,6 +164,73 @@ function collectConfig() {
   };
 }
 
+function fillTitleModelSelect(models, selected) {
+  const select = $("filename_model");
+  if (!select) return;
+  const current = String(selected || select.value || "gpt-5.4-mini").trim() || "gpt-5.4-mini";
+  const ids = [];
+  for (const name of models || []) {
+    const text = String(name || "").trim();
+    if (text && ids.indexOf(text) < 0) ids.push(text);
+  }
+  if (current && ids.indexOf(current) < 0) ids.unshift(current);
+  if (!ids.length) {
+    for (const name of FALLBACK_TITLE_MODELS) ids.push(name);
+  }
+  select.innerHTML = ids.map((name) => `<option value="${escapeAttr(name)}">${escapeAttr(name)}</option>`).join("");
+  select.value = current;
+}
+
+async function loadTitleModels({ silent = true } = {}) {
+  const hint = $("title-model-hint");
+  const selected = $("filename_model") ? $("filename_model").value : "gpt-5.4-mini";
+  let cfg = { api: {} };
+  try {
+    cfg = collectConfig();
+  } catch (ignore) {
+    /* form may not be fully ready */
+  }
+  try {
+    const res = await fetch("/api/title-models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: cfg.api.api_key || "",
+        filename_api_key: cfg.api.filename_api_key || "",
+        username: cfg.api.username || "",
+        password: cfg.api.password || "",
+        filename_model: selected,
+      }),
+    });
+    const data = await parseJson(res);
+    const models = (data && data.models && data.models.length) ? data.models : FALLBACK_TITLE_MODELS;
+    fillTitleModelSelect(models, selected);
+    if (hint) {
+      if (data && data.ok && data.source === "relay") {
+        hint.textContent = `已从中转站加载 ${data.models.length} 个对话模型。列表取决于当前对话 Key 的分组权限；后台开通更多模型后点「刷新模型」。`;
+        hint.classList.remove("error");
+      } else {
+        const reason = (data && data.error) ? data.error : "未能从中转站拉取模型";
+        hint.textContent = `${reason} 已显示常用备选，仍可手动选择后保存。`;
+        hint.classList.add("error");
+      }
+    }
+    if (!silent && data && data.ok) {
+      notify(`已加载 ${data.models.length} 个标题模型。`);
+    } else if (!silent && data && !data.ok) {
+      notify(data.error || "刷新模型失败，已显示常用备选。");
+    }
+  } catch (err) {
+    fillTitleModelSelect(FALLBACK_TITLE_MODELS, selected);
+    const message = err && err.message ? err.message : String(err);
+    if (hint) {
+      hint.textContent = `读取中转站模型列表失败：${message}。已显示常用备选。`;
+      hint.classList.add("error");
+    }
+    if (!silent) notify(`刷新模型失败：${message}`);
+  }
+}
+
 function applyConfig(config) {
   document.querySelector(`input[name=mode][value="${config.mode}"]`).checked = true;
   if ($("upload_category")) $("upload_category").value = canonicalCategory(config.upload_category || "");
@@ -172,6 +242,7 @@ function applyConfig(config) {
     $("site_preset").value = (config.site.login_url || "").includes("cqwall.com") ? "cqwall" : "demo";
   }
   for (const key of apiFields) $(key).value = config.api[key] == null ? "" : config.api[key];
+  fillTitleModelSelect(FALLBACK_TITLE_MODELS, (config.api.filename_model || "").trim() || "gpt-5.4-mini");
   if ($("api_username")) $("api_username").value = config.api.username || "";
   if ($("api_password")) $("api_password").value = config.api.password || "";
   secretStore.api_username = $("api_username") ? $("api_username").value : "";
@@ -353,6 +424,7 @@ async function refresh() {
   if (data.stopping) jobStopping = true;
   setStatus(data.running, data.stopping);
   renderLogs(data.logs);
+  await loadTitleModels({ silent: true });
 }
 
 async function saveConfig({ silent = false } = {}) {
@@ -402,6 +474,7 @@ document.querySelectorAll("aside nav button").forEach((button) => {
     $("heading").textContent = headings[pane][0];
     $("subheading").textContent = headings[pane][1];
     if (pane === "folders" || pane === "job") refreshCounts();
+    if (pane === "api") loadTitleModels({ silent: true });
   };
 });
 
@@ -417,6 +490,15 @@ function bindSaveButtons() {
 }
 bindSaveButtons();
 ["api_username", "api_password", "api_key", "filename_api_key"].forEach((id) => bindSecret($(id), id));
+bindClick("btn-refresh-title-models", async () => {
+  const btn = $("btn-refresh-title-models");
+  if (btn) btn.disabled = true;
+  try {
+    await loadTitleModels({ silent: false });
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
 bindClick("btn-start", async () => {
   const running = $("status-pill").classList.contains("live");
   if (running) {

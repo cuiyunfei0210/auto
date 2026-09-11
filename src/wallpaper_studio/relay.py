@@ -12,6 +12,7 @@ from wallpaper_studio.files import fit_image_bytes, sanitize_filename, unique_pa
 from wallpaper_studio.models import (
     ApiSettings,
     DEFAULT_API_BASE,
+    FALLBACK_TITLE_MODELS,
     effective_remix_prompt,
     title_api_settings,
 )
@@ -47,7 +48,9 @@ def friendly_error_message(raw: str) -> str:
     if "not supported by any configured account" in lowered or "model_not_found" in lowered:
         return (
             "这个中转站的 Key 组没有该模型。"
-            "生图请用 gpt-image-2；写标题请用 gpt-5.4-mini，接口用 https://api.newxxt.top（不要带 /v1）。"
+            "生图请用 gpt-image-2；写标题请在「二创 API」里选一个当前对话 Key 可用的模型。"
+            "接口用 https://api.newxxt.top（不要带 /v1）。"
+            "若列表只有一个模型，到 newxxt 后台给这组 Key 开通更多对话模型后再点「刷新模型」。"
         )
     if "image generation is not enabled" in lowered:
         return (
@@ -135,6 +138,55 @@ def chat_model_supports_titles(model: str) -> bool:
         return False
     markers = ("image", "dall-e", "dalle", "flux", "midjourney", "stable-diffusion", "sdxl")
     return not any(token in name for token in markers)
+
+
+def parse_model_ids(data: object) -> list[str]:
+    """Accept OpenAI / New-API model list payloads."""
+    items: list[object] = []
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        raw = data.get("data")
+        if isinstance(raw, list):
+            items = raw
+        elif isinstance(raw, dict):
+            nested = raw.get("data") or raw.get("items") or raw.get("models") or []
+            if isinstance(nested, list):
+                items = nested
+        elif isinstance(data.get("models"), list):
+            items = data["models"]
+    ids: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if isinstance(item, str):
+            name = item.strip()
+        elif isinstance(item, dict):
+            name = str(item.get("id") or item.get("model") or item.get("name") or "").strip()
+        else:
+            continue
+        if name and name not in seen:
+            seen.add(name)
+            ids.append(name)
+    return ids
+
+
+def sort_title_models(models: list[str]) -> list[str]:
+    rank = {name: index for index, name in enumerate(FALLBACK_TITLE_MODELS)}
+    unique: list[str] = []
+    seen: set[str] = set()
+    for name in models:
+        text = (name or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        unique.append(text)
+    return sorted(unique, key=lambda name: (rank.get(name, 100), name.lower()))
+
+
+def title_models_from_payload(data: object) -> list[str]:
+    return sort_title_models(
+        [name for name in parse_model_ids(data) if chat_model_supports_titles(name)]
+    )
 
 
 def _is_tools_choice_error(text: str) -> bool:
@@ -366,6 +418,27 @@ class RelayClient:
     def _url(self, path: str) -> str:
         return normalize_api_base(self.settings.base_url) + path
 
+    def _get_json(self, path: str, timeout: float | None = None) -> dict:
+        kwargs: dict = {"timeout": self.timeout if timeout is None else timeout}
+        if self.transport is not None:
+            kwargs["transport"] = self.transport
+        if stop_requested():
+            raise JobStopped("已手动停止")
+        try:
+            with httpx.Client(**kwargs) as client:
+                push_http(client)
+                try:
+                    response = client.get(self._url(path), headers=self._auth_headers())
+                finally:
+                    pop_http(client)
+            return _json_or_error(response)
+        except JobStopped:
+            raise
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            if stop_requested():
+                raise JobStopped("已手动停止") from exc
+            raise ApiError(f"中转站网络超时或中断：{exc}") from exc
+
     def _chat_model(self) -> str:
         return (
             self.settings.remix_chat_model.strip()
@@ -479,6 +552,25 @@ class RelayClient:
             if chat_model_supports_titles(candidate):
                 return candidate.strip()
         return ""
+
+    def list_models(self) -> list[str]:
+        return parse_model_ids(self._models_payload())
+
+    def list_title_models(self) -> list[str]:
+        """Chat/vision models the current Key can use for titles."""
+        return title_models_from_payload(self._models_payload())
+
+    def _models_payload(self) -> dict:
+        data = self._get_json("/v1/models", timeout=20.0)
+        if isinstance(data, dict):
+            code = str(data.get("code") or "").lower()
+            failed = data.get("success") is False or (
+                "invalid" in code and "key" in code
+            )
+            if failed:
+                raise ApiError(str(data.get("message") or data.get("error") or "Invalid API key"))
+            return data
+        return {"data": data}
 
     def generate_title(self, original_stem: str, image: Path | None = None) -> str:
         model = self.resolve_title_model()

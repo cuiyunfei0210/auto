@@ -13,7 +13,10 @@ from wallpaper_studio.relay import (
     extract_image_payload,
     friendly_error_message,
     official_image_size,
+    parse_model_ids,
     resolve_remix_size,
+    sort_title_models,
+    title_models_from_payload,
 )
 from tests.helpers import make_png
 
@@ -826,3 +829,73 @@ def test_resolve_title_model_skips_image_models():
     assert client.resolve_title_model() == ""
     client = RelayClient(ApiSettings(filename_model="gpt-image-2", remix_chat_model="gpt-4o-mini"))
     assert client.resolve_title_model() == "gpt-4o-mini"
+
+
+def test_parse_model_ids_accepts_openai_and_newapi_shapes():
+    openai_ids = parse_model_ids(
+        {
+            "object": "list",
+            "data": [
+                {"id": "gpt-5.4-mini"},
+                {"id": "gpt-5.4"},
+                {"id": "gpt-image-2"},
+            ],
+        }
+    )
+    assert openai_ids == ["gpt-5.4-mini", "gpt-5.4", "gpt-image-2"]
+    assert parse_model_ids({"data": ["gpt-5.4", "gpt-4o-mini"]}) == ["gpt-5.4", "gpt-4o-mini"]
+    assert parse_model_ids({"data": {"models": [{"name": "gpt-5.2"}]}}) == ["gpt-5.2"]
+
+
+def test_title_models_from_payload_drops_image_models_and_sorts():
+    models = title_models_from_payload(
+        {
+            "data": [
+                {"id": "gpt-4o"},
+                {"id": "gpt-image-2"},
+                {"id": "dall-e-3"},
+                {"id": "gpt-5.4"},
+                {"id": "gpt-5.4-mini"},
+            ]
+        }
+    )
+    assert models == ["gpt-5.4-mini", "gpt-5.4", "gpt-4o"]
+    assert "gpt-image-2" not in models
+    assert sort_title_models(["gpt-4o", "gpt-5.4-mini"]) == ["gpt-5.4-mini", "gpt-4o"]
+
+
+def test_list_title_models_uses_relay_models_endpoint():
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        assert request.method == "GET"
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {"id": "gpt-5.4-mini"},
+                    {"id": "gpt-5.4"},
+                    {"id": "gpt-image-2"},
+                    {"id": "claude-sonnet-4.6"},
+                ],
+            },
+        )
+
+    client = RelayClient(ApiSettings(api_key="sk-test"), transport=httpx.MockTransport(handler))
+    assert client.list_title_models() == ["gpt-5.4-mini", "gpt-5.4", "claude-sonnet-4.6"]
+    assert any("/v1/models" in url for url in seen)
+
+
+def test_list_title_models_rejects_invalid_key_payload():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": "INVALID_API_KEY", "message": "Invalid API key"})
+
+    client = RelayClient(ApiSettings(api_key="sk-bad"), transport=httpx.MockTransport(handler))
+    try:
+        client.list_title_models()
+    except ApiError as exc:
+        assert "Invalid API key" in str(exc)
+    else:
+        raise AssertionError("expected invalid key to fail")

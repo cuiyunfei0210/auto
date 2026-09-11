@@ -13,7 +13,12 @@ from wallpaper_studio import __version__
 from wallpaper_studio.control import JobStopped, clear_stop, request_stop, stop_requested
 from wallpaper_studio.demo_site import demo_router
 from wallpaper_studio.jobs import run_job
-from wallpaper_studio.models import AppConfig
+from wallpaper_studio.models import (
+    FALLBACK_TITLE_MODELS,
+    ApiSettings,
+    AppConfig,
+    title_api_settings,
+)
 from wallpaper_studio.storage import (
     load_config,
     output_dir_status,
@@ -24,7 +29,7 @@ from wallpaper_studio.files import empty_source_message, list_images
 from wallpaper_studio.scheduler import ProxyAssignmentError, preview_proxy_assignments
 from wallpaper_studio.sites import SITE_PRESETS
 from wallpaper_studio.paths import archive_temp_warning, web_dir
-from wallpaper_studio.relay import friendly_error_message
+from wallpaper_studio.relay import ApiError, RelayClient, friendly_error_message
 from wallpaper_studio.preflight import format_start_problems, start_problems
 
 WEB_DIR = web_dir()
@@ -210,6 +215,72 @@ def create_app() -> FastAPI:
             return JSONResponse({"ok": False, "error": exc.errors()}, status_code=400)
         save_config(config)
         return JSONResponse({"ok": True, "config": config.model_dump()})
+
+    @app.post("/api/title-models")
+    async def api_title_models(payload: dict[str, Any] | None = None) -> JSONResponse:
+        """List chat models the current newxxt Key can use for wallpaper titles."""
+        body = payload or {}
+        try:
+            config = load_config()
+        except Exception:
+            config = AppConfig()
+        api = config.api.model_dump()
+        for key in ("api_key", "filename_api_key", "username", "password", "filename_model"):
+            value = body.get(key)
+            if isinstance(value, str) and value.strip():
+                api[key] = value
+        settings = title_api_settings(ApiSettings.model_validate(api))
+        has_secret = bool(
+            settings.api_key.strip()
+            or (settings.username.strip() and settings.password)
+        )
+        fallback = list(FALLBACK_TITLE_MODELS)
+        current = str(api.get("filename_model") or "").strip()
+        if current and current not in fallback and current.lower() not in {
+            name.lower() for name in fallback
+        }:
+            fallback = [current, *fallback]
+        if not has_secret:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "source": "fallback",
+                    "models": fallback,
+                    "error": "还没有填写对话 API Key。先填 Key 再刷新，列表来自中转站 GET /v1/models。",
+                }
+            )
+        try:
+            models = RelayClient(settings, timeout=20.0).list_title_models()
+        except ApiError as exc:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "source": "fallback",
+                    "models": fallback,
+                    "error": friendly_error_message(str(exc)),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "source": "fallback",
+                    "models": fallback,
+                    "error": f"读取中转站模型列表失败：{exc}",
+                }
+            )
+        if current and current not in models:
+            models = [current, *models]
+        if not models:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "source": "fallback",
+                    "models": fallback,
+                    "error": "中转站没有返回可用的对话模型。请到 newxxt 后台给这组 Key 开通 gpt-5.4-mini 等对话模型。",
+                }
+            )
+        return JSONResponse({"ok": True, "source": "relay", "models": models, "error": None})
 
     @app.post("/api/start")
     async def api_start() -> JSONResponse:
