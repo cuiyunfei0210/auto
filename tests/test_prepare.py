@@ -100,6 +100,8 @@ def test_prepare_decrements_remix_remaining(studio_home, monkeypatch):
     assert ticks[1] == (1, 2)
     assert ticks[2] == (0, 2)
     assert any("不会强制黄昏" in line for line in logs)
+    assert any("出图通常要" in line for line in logs)
+    assert any("稍等 2 秒" in line for line in logs)
 
 
 def test_prepare_skips_failed_remix_and_continues(studio_home, monkeypatch):

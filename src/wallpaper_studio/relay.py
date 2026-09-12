@@ -3,12 +3,16 @@ from __future__ import annotations
 import base64
 import mimetypes
 import re
+import threading
+import time
+from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
 
 from wallpaper_studio.control import JobStopped, pop_http, push_http, stop_requested, wait_or_stop
-from wallpaper_studio.files import fit_image_bytes, sanitize_filename, unique_path
+from wallpaper_studio.files import fit_image_bytes, relay_source_payload, sanitize_filename, unique_path
 from wallpaper_studio.models import (
     ApiSettings,
     DEFAULT_API_BASE,
@@ -395,14 +399,56 @@ class RelayClient:
     def __init__(
         self,
         settings: ApiSettings,
-        timeout: float = 240.0,
+        timeout: float = 120.0,
         transport: httpx.BaseTransport | None = None,
+        log: Callable[[str], None] | None = None,
     ) -> None:
         self.settings = settings
         self.timeout = timeout
         self.transport = transport
+        self.log = log
         self._resolved_key: str | None = None
         self.last_source_category = ""
+
+    def _emit(self, message: str) -> None:
+        if not self.log:
+            return
+        try:
+            self.log(message)
+        except Exception:
+            pass
+
+    def _httpx_timeout(self, timeout: float | None = None) -> httpx.Timeout:
+        read = float(self.timeout if timeout is None else timeout)
+        return httpx.Timeout(connect=15.0, write=min(90.0, max(read, 20.0)), read=read, pool=15.0)
+
+    def _client_kwargs(self, timeout: float | None = None) -> dict:
+        kwargs: dict = {"timeout": self._httpx_timeout(timeout)}
+        if self.transport is not None:
+            kwargs["transport"] = self.transport
+        return kwargs
+
+    @contextmanager
+    def _in_flight(self, label: str, interval: float = 20.0):
+        self._emit(label)
+        stop = threading.Event()
+        started = time.monotonic()
+
+        def beat() -> None:
+            while not stop.wait(interval):
+                waited = max(1, round(time.monotonic() - started))
+                self._emit(f"{label.rstrip('…。 ')}，已等待 {waited} 秒…")
+
+        thread = None
+        if self.log:
+            thread = threading.Thread(target=beat, daemon=True, name="relay-heartbeat")
+            thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            if thread is not None:
+                thread.join(timeout=1.0)
 
     def _headers(self) -> dict[str, str]:
         if not self._resolved_key:
@@ -421,16 +467,15 @@ class RelayClient:
         return normalize_api_base(self.settings.base_url) + path
 
     def _get_json(self, path: str, timeout: float | None = None) -> dict:
-        kwargs: dict = {"timeout": self.timeout if timeout is None else timeout}
-        if self.transport is not None:
-            kwargs["transport"] = self.transport
+        kwargs = self._client_kwargs(timeout)
         if stop_requested():
             raise JobStopped("已手动停止")
         try:
             with httpx.Client(**kwargs) as client:
                 push_http(client)
                 try:
-                    response = client.get(self._url(path), headers=self._auth_headers())
+                    with self._in_flight(f"正在请求中转站 {path} …"):
+                        response = client.get(self._url(path), headers=self._auth_headers())
                 finally:
                     pop_http(client)
             return _json_or_error(response)
@@ -456,23 +501,24 @@ class RelayClient:
         retries: int = 0,
         retry_tools_error: bool = False,
     ) -> dict:
-        kwargs: dict = {"timeout": self.timeout if timeout is None else timeout}
-        if self.transport is not None:
-            kwargs["transport"] = self.transport
+        kwargs = self._client_kwargs(timeout)
         last_error: Exception | None = None
         attempts = max(1, retries + 1)
         for attempt in range(attempts):
             if stop_requested():
                 raise JobStopped("已手动停止")
+            if attempt:
+                self._emit(f"中转站无响应，正在重试（{attempt + 1}/{attempts}）…")
             try:
                 with httpx.Client(**kwargs) as client:
                     push_http(client)
                     try:
-                        response = client.post(
-                            self._url(path),
-                            headers=self._headers(),
-                            json=payload,
-                        )
+                        with self._in_flight(f"正在请求中转站 {path}…"):
+                            response = client.post(
+                                self._url(path),
+                                headers=self._headers(),
+                                json=payload,
+                            )
                     finally:
                         pop_http(client)
                 return _json_or_error(response)
@@ -507,24 +553,25 @@ class RelayClient:
         data: dict,
         retries: int = 0,
     ) -> dict:
-        kwargs: dict = {"timeout": self.timeout}
-        if self.transport is not None:
-            kwargs["transport"] = self.transport
+        kwargs = self._client_kwargs()
         last_error: Exception | None = None
         attempts = max(1, retries + 1)
         for attempt in range(attempts):
             if stop_requested():
                 raise JobStopped("已手动停止")
+            if attempt:
+                self._emit(f"中转站无响应，正在重试（{attempt + 1}/{attempts}）…")
             try:
                 with httpx.Client(**kwargs) as client:
                     push_http(client)
                     try:
-                        response = client.post(
-                            self._url(path),
-                            headers=self._auth_headers(),
-                            data=data,
-                            files=files,
-                        )
+                        with self._in_flight(f"正在请求中转站 {path}…"):
+                            response = client.post(
+                                self._url(path),
+                                headers=self._auth_headers(),
+                                data=data,
+                                files=files,
+                            )
                     finally:
                         pop_http(client)
                 return _json_or_error(response)
@@ -682,8 +729,13 @@ class RelayClient:
         category: str = "",
         subject: str = "",
     ) -> Path:
-        mime = mimetypes.guess_type(source.name)[0] or "image/png"
-        raw = source.read_bytes()
+        original_size = source.stat().st_size
+        raw, mime = relay_source_payload(source)
+        if len(raw) < original_size:
+            self._emit(
+                f"原图 {original_size // 1024}KB，已压缩到 {len(raw) // 1024}KB 再发给中转站"
+                "（过大的相机原图容易把中转站卡住）"
+            )
         encoded = base64.b64encode(raw).decode("ascii")
         data_url = f"data:{mime};base64,{encoded}"
         errors: list[str] = []
@@ -712,7 +764,7 @@ class RelayClient:
         copyright_blocked = False
         for path, payload in self._remix_requests(data_url, mime, category=category):
             try:
-                data = self._post_json(path, payload, retries=3)
+                data = self._post_json(path, payload, retries=1)
                 image_bytes, suffix = extract_image_payload(data, source.suffix)
             except ApiError as exc:
                 errors.append(f"{path}: {exc}")
@@ -950,7 +1002,12 @@ class RelayClient:
         clients = [self]
         title = title_api_settings(self.settings)
         if title is not self.settings:
-            clients.insert(0, RelayClient(title, timeout=self.timeout, transport=self.transport))
+            clients.insert(0, RelayClient(
+                title,
+                timeout=self.timeout,
+                transport=self.transport,
+                log=self.log,
+            ))
         return clients
 
 

@@ -915,3 +915,53 @@ def test_list_title_models_rejects_invalid_key_payload():
         assert "Invalid API key" in str(exc)
     else:
         raise AssertionError("expected invalid key to fail")
+
+
+def test_remix_shrinks_camera_jpeg_before_relay(tmp_path: Path):
+    from PIL import Image
+
+    from wallpaper_studio.files import MAX_RELAY_BYTES, MAX_RELAY_SIDE
+
+    source = tmp_path / "camera.jpg"
+    Image.new("RGB", (4000, 3000), (20, 40, 60)).save(source, format="JPEG", quality=95)
+    sent: dict[str, object] = {}
+    tiny = make_png(tmp_path / "tiny.png").read_bytes()
+    tiny_b64 = base64.b64encode(tiny).decode("ascii")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/v1/images/edits"):
+            body = json.loads(request.content)
+            url = body["images"][0]["image_url"]["url"]
+            header, encoded = url.split(",", 1)
+            raw = base64.b64decode(encoded)
+            sent["bytes"] = len(raw)
+            sent["header"] = header
+            (tmp_path / "sent.jpg").write_bytes(raw)
+            return httpx.Response(200, json={"data": [{"b64_json": tiny_b64}]})
+        return httpx.Response(400, json={"error": {"message": "skip"}})
+
+    logs: list[str] = []
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+        log=logs.append,
+    )
+    dest = client.remix_image(source, tmp_path / "out", "山峰")
+    assert dest.exists()
+    assert sent["bytes"] <= MAX_RELAY_BYTES
+    assert "image/jpeg" in str(sent["header"])
+    with Image.open(tmp_path / "sent.jpg") as image:
+        assert max(image.size) <= MAX_RELAY_SIDE
+    assert any("压缩" in line for line in logs)
+    assert any("/v1/images/edits" in line for line in logs)
+
+
+def test_in_flight_heartbeat_keeps_writing_logs():
+    import time
+
+    logs: list[str] = []
+    client = RelayClient(ApiSettings(api_key="sk-test"), log=logs.append)
+    with client._in_flight("正在请求中转站 /v1/images/edits…", interval=0.08):
+        time.sleep(0.22)
+    assert logs[0] == "正在请求中转站 /v1/images/edits…"
+    assert any("已等待" in line for line in logs[1:])
