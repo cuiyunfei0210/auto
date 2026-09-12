@@ -60,6 +60,30 @@ def _write_pth(embed_dir: Path) -> None:
     pth.write_text("python312.zip\n.\nLib\\site-packages\nimport site\n", encoding="utf-8")
 
 
+LAUNCHER_BAT_NAMES = ("1-打开壁纸工坊.bat", "打开壁纸工坊.bat")
+
+
+def _copy_launcher_bats(dest: Path) -> None:
+    bat = ROOT / "packaging" / "open-studio.bat"
+    if not bat.is_file():
+        return
+    for name in LAUNCHER_BAT_NAMES:
+        shutil.copy2(bat, dest / name)
+
+
+def clean_for_delivery(dest: Path) -> None:
+    """Drop headers, smoke-test leftovers, and other files that hide the exe."""
+    dest = Path(dest)
+    for name in ("Include", "data", "Scripts"):
+        path = dest / name
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+    for name in ("launcher.log", "smoke-out.txt", "smoke-err.txt", "get-pip.py"):
+        path = dest / name
+        if path.is_file():
+            path.unlink(missing_ok=True)
+
+
 def _compile_launcher(embed_dir: Path) -> None:
     csc = _csc()
     launcher = ROOT / "packaging" / "launcher.cs"
@@ -110,9 +134,8 @@ def build(dest: Path | None = None) -> Path:
     readme = ROOT / "packaging" / "exe-readme.txt"
     if readme.exists():
         shutil.copy2(readme, dest / "使用说明.txt")
-    bat = ROOT / "packaging" / "open-studio.bat"
-    if bat.exists():
-        shutil.copy2(bat, dest / "打开壁纸工坊.bat")
+    _copy_launcher_bats(dest)
+    clean_for_delivery(dest)
 
     sys.path.insert(0, str(ROOT / "packaging"))
     from windows_runtime import copy_crt_dlls

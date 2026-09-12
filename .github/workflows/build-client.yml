@@ -121,14 +121,33 @@ jobs:
         run: |
           mkdir -p delivery
           cp packaging/exe-readme.txt delivery/使用说明.txt || cp packaging/exe-readme.txt delivery/
-          if [ -d dist/WallpaperStudio ]; then
+          if [ -f dist/WallpaperStudio/WallpaperStudio.exe ]; then
+            python -c "from pathlib import Path; import sys; sys.path.insert(0, 'packaging'); from build_windows_embed import clean_for_delivery, _copy_launcher_bats; p = Path('dist/WallpaperStudio'); clean_for_delivery(p); _copy_launcher_bats(p)"
+            cp packaging/open-studio.bat "delivery/1-打开壁纸工坊.bat"
+            cp packaging/open-studio.bat "delivery/打开壁纸工坊.bat"
             cp -R dist/WallpaperStudio delivery/WallpaperStudio
-            cp packaging/open-studio.bat delivery/WallpaperStudio/打开壁纸工坊.bat || true
+          elif [ -d dist/WallpaperStudio ]; then
+            cp -R dist/WallpaperStudio delivery/WallpaperStudio
+            cp packaging/open-studio.bat "delivery/WallpaperStudio/打开壁纸工坊.bat" || true
           elif [ -f dist/WallpaperStudio.exe ]; then
             cp dist/WallpaperStudio.exe delivery/
           else
             cp dist/WallpaperStudio delivery/
           fi
+      - name: Confirm Windows zip layout
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          root = Path("delivery")
+          assert (root / "1-打开壁纸工坊.bat").is_file(), list(root.iterdir())
+          app = root / "WallpaperStudio"
+          assert (app / "WallpaperStudio.exe").is_file(), app
+          assert (app / "pythonw.exe").is_file(), app
+          assert (app / "python312.dll").is_file(), app
+          assert (app / "1-打开壁纸工坊.bat").is_file(), list(app.glob("*.bat"))
+          assert not (app / "Include").exists(), "headers hide the exe in Explorer"
+          assert not (app / "data").exists(), "smoke-test data must not ship"
       - uses: actions/upload-artifact@v4
         with:
           name: client-${{ runner.os }}

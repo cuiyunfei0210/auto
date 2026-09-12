@@ -1,17 +1,26 @@
-把整个 WallpaperStudio 文件夹拷到电脑上任意位置。
+解压 client-Windows.zip 之后，先看这一层（不要进 Lib / Include）：
+
+  1-打开壁纸工坊.bat     ← 双击这个
+  使用说明.txt
+  WallpaperStudio        ← 运行库文件夹，不用翻里面找程序
 
 打开方法
-1. 进入 WallpaperStudio 文件夹
-2. 双击 WallpaperStudio.exe
+1. 整个压缩包解压到桌面一个新文件夹，不要解压进旧的 WallpaperStudio
+2. 双击「1-打开壁纸工坊.bat」
 3. 会弹出「壁纸工坊」程序窗口，不再打开系统浏览器
 4. 用完关窗口，或点网页里的「退出程序」
+
+如果进了 WallpaperStudio 文件夹
+- Lib、Include、data 都不是程序
+- 按名称排序时 WallpaperStudio.exe 排在一堆 .dll 后面，请往下滚
+- 也可以直接双击同目录的「1-打开壁纸工坊.bat」
 
 第一次如果提示缺 WebView2
 - 安装 Microsoft Edge WebView2：https://go.microsoft.com/fwlink/p/?LinkId=2124703
 - 一般装了 Edge 的 Windows 已经自带
 
 注意
-- 发给别人时：把整个 WallpaperStudio 文件夹打成 zip 再发（_internal 必须在）。不要只发一个 exe。微信/QQ 常会拦 exe。对方解压到桌面后再打开。
+- 发给别人时：把整个解压出来的文件夹打成 zip 再发。不要只发一个 exe。微信/QQ 常会拦 exe。对方解压到桌面后再打开。
 - 不要把你用过的 data\config.json 一起发出去也行；新版本会忽略别人电脑的 C:\Users\... 路径。若对方仍报错，让他删掉 data\config.json 再打开。
 - 操作界面在程序窗口里。上传壁纸站用系统自带的 Edge / Chrome（不把 600MB 的 Chromium 打进包里）。没有 Edge 时请先安装 Microsoft Edge
 - 不要只拷一个 exe，同目录的其它文件也要一起带走

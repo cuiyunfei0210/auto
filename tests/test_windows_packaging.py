@@ -22,6 +22,9 @@ def test_windows_packaging_files_exist():
     assert "include-hidden-files: true" in workflow
     assert "Smoke-test Windows exe" in workflow
     assert "open-studio.bat" in workflow
+    assert "1-打开壁纸工坊.bat" in workflow
+    assert "clean_for_delivery" in workflow
+    assert "Confirm Windows zip layout" in workflow
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
     assert ".local-browsers" in spec
     assert "Do not ship Playwright" in spec
@@ -69,10 +72,15 @@ def test_windows_packaging_files_exist():
     assert "access_log=False" in launcher
     readme = (root / "packaging" / "exe-readme.txt").read_text(encoding="utf-8")
     assert "python312.dll" in readme
+    assert "1-打开壁纸工坊.bat" in readme
+    assert "Lib、Include" in readme or "Lib / Include" in readme
+    assert "往下滚" in readme
     launcher_bat = (root / "packaging" / "open-studio.bat").read_text(encoding="utf-8")
     assert "pythonw.exe" in launcher_bat
     assert "Failed to load Python DLL" in launcher_bat
     assert "Unblock-File" in launcher_bat
+    assert "WallpaperStudio\\WallpaperStudio.exe" in launcher_bat
+    assert "Lib 或 Include" in launcher_bat
     runtime = (root / "packaging" / "windows_runtime.py").read_text(encoding="utf-8")
     assert "vcruntime140_1.dll" in runtime
     assert "ucrtbase.dll" in runtime
@@ -81,6 +89,30 @@ def test_windows_packaging_files_exist():
     assert "程序窗口" in readme
     assert "WebView2" in readme
     assert "系统 Edge" in readme or "Edge / Chrome" in readme
+
+
+def test_clean_for_delivery_strips_headers_and_logs(tmp_path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "build_windows_embed",
+        Path(__file__).resolve().parents[1] / "packaging" / "build_windows_embed.py",
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    dest = tmp_path / "app"
+    (dest / "Include").mkdir(parents=True)
+    (dest / "data").mkdir()
+    (dest / "Lib").mkdir()
+    (dest / "launcher.log").write_text("x", encoding="utf-8")
+    (dest / "WallpaperStudio.exe").write_bytes(b"mz")
+    mod.clean_for_delivery(dest)
+    assert not (dest / "Include").exists()
+    assert not (dest / "data").exists()
+    assert not (dest / "launcher.log").exists()
+    assert (dest / "Lib").is_dir()
+    assert (dest / "WallpaperStudio.exe").is_file()
 
 
 def test_studio_js_has_valid_syntax():
