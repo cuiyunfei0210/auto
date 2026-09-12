@@ -131,6 +131,24 @@ input, textarea, select {
   padding: 10px 12px;
 }
 
+.field-with-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.field-with-action select,
+.field-with-action input {
+  margin-top: 0;
+  flex: 1;
+  min-width: 0;
+}
+.field-with-action .ghost {
+  flex-shrink: 0;
+  width: auto;
+  white-space: nowrap;
+}
+
 .choice {
   display: flex;
   gap: 10px;

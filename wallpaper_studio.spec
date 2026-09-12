@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-import os
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -10,33 +10,17 @@ web = root / "src" / "wallpaper_studio" / "web"
 readme = root / "packaging" / "exe-readme.txt"
 
 
-def _windows_runtime_binaries() -> list[tuple[str, str]]:
-    """Ship python312.dll plus the VC runtime it needs to LoadLibrary."""
-    if sys.platform != "win32":
-        return []
-    names = (
-        "python312.dll",
-        "python3.dll",
-        "vcruntime140.dll",
-        "vcruntime140_1.dll",
-        "msvcp140.dll",
-    )
-    directories = [
-        Path(sys.base_prefix),
-        Path(sys.base_prefix) / "DLLs",
-        Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32",
-    ]
-    found: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    for directory in directories:
-        for name in names:
-            if name in seen:
-                continue
-            src = directory / name
-            if src.is_file():
-                found.append((str(src), "."))
-                seen.add(name)
-    return found
+def _load_windows_runtime():
+    path = root / "packaging" / "windows_runtime.py"
+    spec = importlib.util.spec_from_file_location("ws_windows_runtime", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_windows_runtime = _load_windows_runtime()
 
 
 datas = [(str(web), "wallpaper_studio/web")]
@@ -48,8 +32,23 @@ datas += [
     for src, dest in collect_data_files("playwright")
     if ".local-browsers" not in Path(src).as_posix()
 ]
-binaries = collect_dynamic_libs("playwright") + _windows_runtime_binaries()
+binaries = [
+    (src, dest)
+    for src, dest in collect_dynamic_libs("playwright")
+    if ".local-browsers" not in Path(src).as_posix()
+] + _windows_runtime.runtime_binary_tuples()
 hiddenimports = [
+    "socket",
+    "_socket",
+    "select",
+    "selectors",
+    "ssl",
+    "_ssl",
+    "multiprocessing",
+    "multiprocessing.connection",
+    "multiprocessing.context",
+    "multiprocessing.reduction",
+    "multiprocessing.spawn",
     "uvicorn.logging",
     "uvicorn.lifespan.on",
     "uvicorn.loops.auto",
@@ -94,20 +93,12 @@ if sys.platform == "win32":
         _collect_pkg(_pkg)
 
 try:
-    import playwright
+    import playwright  # noqa: F401 — freeze-time check; Chromium itself is not shipped
 except ImportError as exc:  # pragma: no cover - build-time check
     raise SystemExit("Playwright is not installed in the build environment.") from exc
 
-# macOS PyInstaller codesign fails on Google Chrome for Testing.app.
-# Windows/Linux keep the bundled Chromium; macOS uses the system Chrome at runtime.
-if sys.platform != "darwin":
-    local_browsers = Path(playwright.__file__).resolve().parent / "driver" / "package" / ".local-browsers"
-    if not local_browsers.exists() or not any(local_browsers.iterdir()):
-        raise SystemExit(
-            "Playwright browsers are missing. Set PLAYWRIGHT_BROWSERS_PATH=0 and run: "
-            "python -m playwright install chromium"
-        )
-    datas.append((str(local_browsers), "playwright/driver/package/.local-browsers"))
+# Do not ship Playwright's Chromium. It is ~600MB and makes client-Windows ~700MB.
+# Frozen Windows launches the installed Edge or Chrome instead.
 
 a = Analysis(
     [str(root / "run.py")],
@@ -121,6 +112,15 @@ a = Analysis(
     excludes=[],
     noarchive=False,
 )
+if sys.platform == "win32":
+    # Analysis may strip UCRT/api-ms-win-crt as "system DLLs". Put them back.
+    have = {str(item[0]).replace("\\", "/").split("/")[-1].lower() for item in a.binaries}
+    for src, _dest in _windows_runtime.runtime_binary_tuples():
+        name = Path(src).name
+        if name.lower() in have:
+            continue
+        a.binaries.append((name, src, "BINARY"))
+        have.add(name.lower())
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -144,3 +144,5 @@ coll = COLLECT(
     upx=False,
     name="WallpaperStudio",
 )
+if sys.platform == "win32":
+    _windows_runtime.copy_runtime_into(Path(DISTPATH) / "WallpaperStudio")

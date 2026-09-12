@@ -13,7 +13,10 @@ from wallpaper_studio.relay import (
     extract_image_payload,
     friendly_error_message,
     official_image_size,
+    parse_model_ids,
     resolve_remix_size,
+    sort_title_models,
+    title_models_from_payload,
 )
 from tests.helpers import make_png
 
@@ -30,7 +33,10 @@ def _payload_image_url(body: dict) -> str:
     return str(image or "")
 
 
-def test_friendly_message_for_chat_group_cannot_generate_images():
+def test_friendly_message_for_invalid_api_key():
+    text = friendly_error_message("Invalid API key")
+    assert "API Key 无效" in text
+    assert friendly_error_message(text) == text
     text = friendly_error_message("Image generation is not enabled for this group")
     assert "对话组" in text
     assert "生图" in text
@@ -734,6 +740,19 @@ def test_title_api_settings_can_use_a_second_key():
     assert title_api_settings(ApiSettings(base_url="https://api.newxxt.top", api_key="sk-same")).api_key == "sk-same"
 
 
+def test_title_api_settings_skips_dead_builtin_chat_key():
+    from wallpaper_studio.models import NEWXXT_CHAT_KEY, title_api_settings, title_list_key_candidates
+
+    settings = ApiSettings(
+        base_url="https://api.newxxt.top",
+        api_key="sk-live-image",
+        filename_api_key=NEWXXT_CHAT_KEY,
+    )
+    assert title_api_settings(settings).api_key == "sk-live-image"
+    assert title_list_key_candidates(settings) == ["sk-live-image"]
+    assert title_list_key_candidates(ApiSettings(api_key=NEWXXT_CHAT_KEY, filename_api_key=NEWXXT_CHAT_KEY)) == []
+
+
 def test_generate_title_uses_filename_relay_host(tmp_path: Path):
     source = make_png(tmp_path / "night.png")
     seen: list[str] = []
@@ -826,3 +845,123 @@ def test_resolve_title_model_skips_image_models():
     assert client.resolve_title_model() == ""
     client = RelayClient(ApiSettings(filename_model="gpt-image-2", remix_chat_model="gpt-4o-mini"))
     assert client.resolve_title_model() == "gpt-4o-mini"
+
+
+def test_parse_model_ids_accepts_openai_and_newapi_shapes():
+    openai_ids = parse_model_ids(
+        {
+            "object": "list",
+            "data": [
+                {"id": "gpt-5.4-mini"},
+                {"id": "gpt-5.4"},
+                {"id": "gpt-image-2"},
+            ],
+        }
+    )
+    assert openai_ids == ["gpt-5.4-mini", "gpt-5.4", "gpt-image-2"]
+    assert parse_model_ids({"data": ["gpt-5.4", "gpt-4o-mini"]}) == ["gpt-5.4", "gpt-4o-mini"]
+    assert parse_model_ids({"data": {"models": [{"name": "gpt-5.2"}]}}) == ["gpt-5.2"]
+
+
+def test_title_models_from_payload_drops_image_models_and_sorts():
+    models = title_models_from_payload(
+        {
+            "data": [
+                {"id": "gpt-4o"},
+                {"id": "gpt-image-2"},
+                {"id": "dall-e-3"},
+                {"id": "gpt-5.4"},
+                {"id": "gpt-5.4-mini"},
+            ]
+        }
+    )
+    assert models == ["gpt-5.4-mini", "gpt-5.4", "gpt-4o"]
+    assert "gpt-image-2" not in models
+    assert sort_title_models(["gpt-4o", "gpt-5.4-mini"]) == ["gpt-5.4-mini", "gpt-4o"]
+
+
+def test_list_title_models_uses_relay_models_endpoint():
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        assert request.method == "GET"
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {"id": "gpt-5.4-mini"},
+                    {"id": "gpt-5.4"},
+                    {"id": "gpt-image-2"},
+                    {"id": "claude-sonnet-4.6"},
+                ],
+            },
+        )
+
+    client = RelayClient(ApiSettings(api_key="sk-test"), transport=httpx.MockTransport(handler))
+    assert client.list_title_models() == ["gpt-5.4-mini", "gpt-5.4", "claude-sonnet-4.6"]
+    assert any("/v1/models" in url for url in seen)
+
+
+def test_list_title_models_rejects_invalid_key_payload():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": "INVALID_API_KEY", "message": "Invalid API key"})
+
+    client = RelayClient(ApiSettings(api_key="sk-bad"), transport=httpx.MockTransport(handler))
+    try:
+        client.list_title_models()
+    except ApiError as exc:
+        assert "Invalid API key" in str(exc)
+    else:
+        raise AssertionError("expected invalid key to fail")
+
+
+def test_remix_shrinks_camera_jpeg_before_relay(tmp_path: Path):
+    from PIL import Image
+
+    from wallpaper_studio.files import MAX_RELAY_BYTES, MAX_RELAY_SIDE
+
+    source = tmp_path / "camera.jpg"
+    Image.new("RGB", (4000, 3000), (20, 40, 60)).save(source, format="JPEG", quality=95)
+    sent: dict[str, object] = {}
+    tiny = make_png(tmp_path / "tiny.png").read_bytes()
+    tiny_b64 = base64.b64encode(tiny).decode("ascii")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/v1/images/edits"):
+            body = json.loads(request.content)
+            url = body["images"][0]["image_url"]["url"]
+            header, encoded = url.split(",", 1)
+            raw = base64.b64decode(encoded)
+            sent["bytes"] = len(raw)
+            sent["header"] = header
+            (tmp_path / "sent.jpg").write_bytes(raw)
+            return httpx.Response(200, json={"data": [{"b64_json": tiny_b64}]})
+        return httpx.Response(400, json={"error": {"message": "skip"}})
+
+    logs: list[str] = []
+    client = RelayClient(
+        ApiSettings(api_key="sk-test", image_size="1024x1024"),
+        transport=httpx.MockTransport(handler),
+        log=logs.append,
+    )
+    dest = client.remix_image(source, tmp_path / "out", "山峰")
+    assert dest.exists()
+    assert sent["bytes"] <= MAX_RELAY_BYTES
+    assert "image/jpeg" in str(sent["header"])
+    with Image.open(tmp_path / "sent.jpg") as image:
+        assert max(image.size) <= MAX_RELAY_SIDE
+    assert any("压缩" in line for line in logs)
+    assert any("/v1/images/edits" in line for line in logs)
+
+
+def test_in_flight_heartbeat_keeps_writing_logs():
+    import time
+
+    logs: list[str] = []
+    client = RelayClient(ApiSettings(api_key="sk-test"), log=logs.append)
+    with client._in_flight("正在请求中转站 /v1/images/edits…", interval=0.08):
+        time.sleep(0.22)
+    assert logs[0] == "正在请求中转站 /v1/images/edits…"
+    assert any("已等待" in line for line in logs[1:])

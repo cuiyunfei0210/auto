@@ -187,7 +187,7 @@
       <section class="pane hidden" id="pane-api">
         <article class="card">
           <h2>中转站 API</h2>
-          <p class="hint">中转站固定 https://api.newxxt.top，生图用 gpt-image-2，写标题用 gpt-5.4-mini。</p>
+          <p class="hint">中转站固定 https://api.newxxt.top。生图用 gpt-image-2。写标题的模型从当前对话 Key 在中转站可用的列表里选，不再写死只能用 gpt-5.4-mini。</p>
           <label>中转站邮箱<input id="api_username" autocomplete="off" spellcheck="false"></label>
           <label>中转站密码<input id="api_password" type="password" autocomplete="new-password"></label>
           <label>生图 API Key<input id="api_key" type="password" autocomplete="new-password" placeholder="sk-…"></label>
@@ -197,12 +197,20 @@
             <option value="gpt-image-2">gpt-image-2</option>
             <option value="gpt-image-1.5">gpt-image-1.5</option>
           </datalist>
-          <label>文件名模型（对话/识图）<input id="filename_model" list="filename-model-options" placeholder="gpt-5.4-mini"></label>
-          <datalist id="filename-model-options">
-            <option value="gpt-5.4-mini">gpt-5.4-mini</option>
-            <option value="gpt-5.4">gpt-5.4</option>
-            <option value="gpt-5.2">gpt-5.2</option>
-          </datalist>
+          <label>文件名模型（对话/识图）
+            <span class="field-with-action">
+              <select id="filename_model">
+                <option value="gpt-5.4-mini">gpt-5.4-mini</option>
+                <option value="gpt-5.4-nano">gpt-5.4-nano</option>
+                <option value="gpt-5.4">gpt-5.4</option>
+                <option value="gpt-5.2">gpt-5.2</option>
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+              </select>
+              <button type="button" class="ghost" id="btn-refresh-title-models">刷新模型</button>
+            </span>
+          </label>
+          <p class="hint" id="title-model-hint">常用对话模型都可选。点「刷新模型」会尝试从中转站更新列表；列表刷新失败不影响你选中的模型，保存后写标题仍用这一项。</p>
           <label>对话 API Key<input id="filename_api_key" type="password" autocomplete="new-password" placeholder="跟生图不是同一组 Key 时再填"></label>
           <label>二创提示词<textarea id="remix_prompt" rows="4" placeholder="按你的二创要求写，例如正午冷色调、更锐利。分类以任务页选择为准"></textarea></label>
           <p class="hint">会按你填的二创提示词生成。分类以任务页本轮选择为准：选了军事就是军事，选了动漫就是动漫，识图不会改分类。上传 CQwall 也用这个分类。</p>
@@ -221,6 +229,6 @@
       </section>
     </main>
   </div>
-  <script src="/static/studio.js?v=20260831a" charset="utf-8"></script>
+  <script src="/static/studio.js?v=20260911b" charset="utf-8"></script>
 </body>
 </html>

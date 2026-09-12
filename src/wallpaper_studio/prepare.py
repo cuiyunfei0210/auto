@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from wallpaper_studio.control import JobStopped, stop_requested
+from wallpaper_studio.control import JobStopped, stop_requested, wait_or_stop
 from wallpaper_studio.files import (
     clear_images_in_dir,
     empty_source_message,
@@ -39,21 +39,21 @@ def prepare_images(
         raise FileNotFoundError(empty_source_message(src))
 
     prepared: list[PreparedImage] = []
-    remix_client = RelayClient(config.api) if config.mode == "remix_then_upload" else None
+    remix_client = RelayClient(config.api, log=emit) if config.mode == "remix_then_upload" else None
     title_settings = title_api_settings(config.api)
     title_client = None
     if config.api.filename_prompt.strip() and _has_api_secret(title_settings):
         if remix_client is not None and title_settings is config.api:
             title_client = remix_client
         else:
-            title_client = RelayClient(title_settings)
+            title_client = RelayClient(title_settings, log=emit)
     title_model = title_client.resolve_title_model() if title_client is not None else ""
     can_rename = bool(title_client is not None and title_model)
     if config.api.filename_prompt.strip() and not can_rename:
         emit(
             "根据图片写标题需要对话/识图模型。"
             f"当前填的是 {config.api.filename_model or '空'}。"
-            "gpt-image-2 不能起名，请把文件名模型改成 gpt-5.4-mini。"
+            "gpt-image-2 不能起名，请到「二创 API」把文件名模型改成中转站支持的对话模型。"
         )
 
     remaining = len(images) if config.mode == "remix_then_upload" else 0
@@ -102,7 +102,11 @@ def prepare_images(
         title = sanitize_filename(title, fallback=image.stem)
         if config.mode == "remix_then_upload":
             assert remix_client is not None
+            if prepared:
+                emit("稍等 2 秒再出下一张，避免中转站卡住")
+                wait_or_stop(2)
             emit(f"正在二创 {label} …")
+            emit("出图通常要 1～2 分钟，请看这条日志是否还在刷新")
             try:
                 remixed = remix_client.remix_image(image, dest, title, category=chosen)
             except JobStopped:

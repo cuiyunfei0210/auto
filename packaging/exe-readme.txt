@@ -1,22 +1,32 @@
-把整个 WallpaperStudio 文件夹拷到电脑上任意位置。
+解压 client-Windows.zip 之后，先看这一层（不要进 Lib / Include）：
+
+  1-打开壁纸工坊.bat     ← 双击这个
+  使用说明.txt
+  WallpaperStudio        ← 运行库文件夹，不用翻里面找程序
 
 打开方法
-1. 进入 WallpaperStudio 文件夹
-2. 双击 WallpaperStudio.exe
+1. 整个压缩包解压到桌面一个新文件夹，不要解压进旧的 WallpaperStudio
+2. 双击「1-打开壁纸工坊.bat」
 3. 会弹出「壁纸工坊」程序窗口，不再打开系统浏览器
 4. 用完关窗口，或点网页里的「退出程序」
+
+如果进了 WallpaperStudio 文件夹
+- Lib、Include、data 都不是程序
+- 按名称排序时 WallpaperStudio.exe 排在一堆 .dll 后面，请往下滚
+- 也可以直接双击同目录的「1-打开壁纸工坊.bat」
 
 第一次如果提示缺 WebView2
 - 安装 Microsoft Edge WebView2：https://go.microsoft.com/fwlink/p/?LinkId=2124703
 - 一般装了 Edge 的 Windows 已经自带
 
 注意
-- 发给别人时：把整个 WallpaperStudio 文件夹打成 zip 再发（_internal 必须在）。不要只发一个 exe。微信/QQ 常会拦 exe。对方解压到桌面后再打开。
+- 发给别人时：把整个解压出来的文件夹打成 zip 再发。不要只发一个 exe。微信/QQ 常会拦 exe。对方解压到桌面后再打开。
 - 不要把你用过的 data\config.json 一起发出去也行；新版本会忽略别人电脑的 C:\Users\... 路径。若对方仍报错，让他删掉 data\config.json 再打开。
-- 上传壁纸站仍用内置 Chromium（在后台填登录表），操作界面在程序窗口里
+- 操作界面在程序窗口里。上传壁纸站用系统自带的 Edge / Chrome（不把 600MB 的 Chromium 打进包里）。没有 Edge 时请先安装 Microsoft Edge
 - 不要只拷一个 exe，同目录的其它文件也要一起带走
 - 不要直接双击压缩包里的程序（WinRAR 临时目录跑起来会出问题）
-- 如果弹出 Failed to load Python DLL / python312.dll / 找不到指定的模块：先删掉整个 WallpaperStudio 文件夹，再解压 GitHub 的 client-Windows。exe 必须和 _internal 在同一层。也可以先双击「打开壁纸工坊.bat」检查。还不行就安装 VC++：https://aka.ms/vs/17/release/vc_redist.x64.exe ，并看杀毒软件有没有隔离 dll
+- 如果弹出 Failed to load Python DLL / python312.dll / 找不到指定的模块：这是旧的 PyInstaller 包装。必须删掉整个 WallpaperStudio 文件夹，再解压最新 client-Windows。新包 exe 旁边直接就是 python312.dll 和 pythonw.exe，没有靠 _internal 启动。还不行就安装 VC++：https://aka.ms/vs/17/release/vc_redist.x64.exe
+- 如果弹出 pyi_rth_multiprocessing / No module named '_socket' 或 socket：同样是旧包或不完整解压。删掉整个文件夹后，重新下载最新一次绿色勾的 client-Windows，不要只用旧 exe 覆盖
 - 配置和图片在 exe 旁边的 data 文件夹。源图请放进 data\source（或「文件夹」页显示的实际读取目录），子文件夹里的图也会算
 - 同一台电脑只能开一份。如果再双击 exe 没有新窗口，多半已经在跑，请到任务栏点「壁纸工坊」
 - 如果提示已经在运行，但看不到窗口：打开任务管理器，结束 WallpaperStudio.exe，再重新双击

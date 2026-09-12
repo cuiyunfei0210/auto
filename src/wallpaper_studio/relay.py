@@ -3,15 +3,20 @@ from __future__ import annotations
 import base64
 import mimetypes
 import re
+import threading
+import time
+from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path
 
 import httpx
 
 from wallpaper_studio.control import JobStopped, pop_http, push_http, stop_requested, wait_or_stop
-from wallpaper_studio.files import fit_image_bytes, sanitize_filename, unique_path
+from wallpaper_studio.files import fit_image_bytes, relay_source_payload, sanitize_filename, unique_path
 from wallpaper_studio.models import (
     ApiSettings,
     DEFAULT_API_BASE,
+    FALLBACK_TITLE_MODELS,
     effective_remix_prompt,
     title_api_settings,
 )
@@ -44,10 +49,14 @@ def friendly_error_message(raw: str) -> str:
         )
     if text.startswith(("生图 Key", "中转站", "当前", "这个中转站", "全部二创", "文生图通道", "改图接口")):
         return text
+    if "invalid api key" in lowered or "incorrect api key" in lowered:
+        return "中转站说这组 API Key 无效。请检查对话 Key，或到 newxxt 后台重新复制。"
     if "not supported by any configured account" in lowered or "model_not_found" in lowered:
         return (
             "这个中转站的 Key 组没有该模型。"
-            "生图请用 gpt-image-2；写标题请用 gpt-5.4-mini，接口用 https://api.newxxt.top（不要带 /v1）。"
+            "生图请用 gpt-image-2；写标题请在「二创 API」里选一个当前对话 Key 可用的模型。"
+            "接口用 https://api.newxxt.top（不要带 /v1）。"
+            "若列表只有一个模型，到 newxxt 后台给这组 Key 开通更多对话模型后再点「刷新模型」。"
         )
     if "image generation is not enabled" in lowered:
         return (
@@ -135,6 +144,55 @@ def chat_model_supports_titles(model: str) -> bool:
         return False
     markers = ("image", "dall-e", "dalle", "flux", "midjourney", "stable-diffusion", "sdxl")
     return not any(token in name for token in markers)
+
+
+def parse_model_ids(data: object) -> list[str]:
+    """Accept OpenAI / New-API model list payloads."""
+    items: list[object] = []
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        raw = data.get("data")
+        if isinstance(raw, list):
+            items = raw
+        elif isinstance(raw, dict):
+            nested = raw.get("data") or raw.get("items") or raw.get("models") or []
+            if isinstance(nested, list):
+                items = nested
+        elif isinstance(data.get("models"), list):
+            items = data["models"]
+    ids: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if isinstance(item, str):
+            name = item.strip()
+        elif isinstance(item, dict):
+            name = str(item.get("id") or item.get("model") or item.get("name") or "").strip()
+        else:
+            continue
+        if name and name not in seen:
+            seen.add(name)
+            ids.append(name)
+    return ids
+
+
+def sort_title_models(models: list[str]) -> list[str]:
+    rank = {name: index for index, name in enumerate(FALLBACK_TITLE_MODELS)}
+    unique: list[str] = []
+    seen: set[str] = set()
+    for name in models:
+        text = (name or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        unique.append(text)
+    return sorted(unique, key=lambda name: (rank.get(name, 100), name.lower()))
+
+
+def title_models_from_payload(data: object) -> list[str]:
+    return sort_title_models(
+        [name for name in parse_model_ids(data) if chat_model_supports_titles(name)]
+    )
 
 
 def _is_tools_choice_error(text: str) -> bool:
@@ -341,14 +399,56 @@ class RelayClient:
     def __init__(
         self,
         settings: ApiSettings,
-        timeout: float = 240.0,
+        timeout: float = 120.0,
         transport: httpx.BaseTransport | None = None,
+        log: Callable[[str], None] | None = None,
     ) -> None:
         self.settings = settings
         self.timeout = timeout
         self.transport = transport
+        self.log = log
         self._resolved_key: str | None = None
         self.last_source_category = ""
+
+    def _emit(self, message: str) -> None:
+        if not self.log:
+            return
+        try:
+            self.log(message)
+        except Exception:
+            pass
+
+    def _httpx_timeout(self, timeout: float | None = None) -> httpx.Timeout:
+        read = float(self.timeout if timeout is None else timeout)
+        return httpx.Timeout(connect=15.0, write=min(90.0, max(read, 20.0)), read=read, pool=15.0)
+
+    def _client_kwargs(self, timeout: float | None = None) -> dict:
+        kwargs: dict = {"timeout": self._httpx_timeout(timeout)}
+        if self.transport is not None:
+            kwargs["transport"] = self.transport
+        return kwargs
+
+    @contextmanager
+    def _in_flight(self, label: str, interval: float = 20.0):
+        self._emit(label)
+        stop = threading.Event()
+        started = time.monotonic()
+
+        def beat() -> None:
+            while not stop.wait(interval):
+                waited = max(1, round(time.monotonic() - started))
+                self._emit(f"{label.rstrip('…。 ')}，已等待 {waited} 秒…")
+
+        thread = None
+        if self.log:
+            thread = threading.Thread(target=beat, daemon=True, name="relay-heartbeat")
+            thread.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            if thread is not None:
+                thread.join(timeout=1.0)
 
     def _headers(self) -> dict[str, str]:
         if not self._resolved_key:
@@ -366,6 +466,26 @@ class RelayClient:
     def _url(self, path: str) -> str:
         return normalize_api_base(self.settings.base_url) + path
 
+    def _get_json(self, path: str, timeout: float | None = None) -> dict:
+        kwargs = self._client_kwargs(timeout)
+        if stop_requested():
+            raise JobStopped("已手动停止")
+        try:
+            with httpx.Client(**kwargs) as client:
+                push_http(client)
+                try:
+                    with self._in_flight(f"正在请求中转站 {path} …"):
+                        response = client.get(self._url(path), headers=self._auth_headers())
+                finally:
+                    pop_http(client)
+            return _json_or_error(response)
+        except JobStopped:
+            raise
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            if stop_requested():
+                raise JobStopped("已手动停止") from exc
+            raise ApiError(f"中转站网络超时或中断：{exc}") from exc
+
     def _chat_model(self) -> str:
         return (
             self.settings.remix_chat_model.strip()
@@ -381,23 +501,24 @@ class RelayClient:
         retries: int = 0,
         retry_tools_error: bool = False,
     ) -> dict:
-        kwargs: dict = {"timeout": self.timeout if timeout is None else timeout}
-        if self.transport is not None:
-            kwargs["transport"] = self.transport
+        kwargs = self._client_kwargs(timeout)
         last_error: Exception | None = None
         attempts = max(1, retries + 1)
         for attempt in range(attempts):
             if stop_requested():
                 raise JobStopped("已手动停止")
+            if attempt:
+                self._emit(f"中转站无响应，正在重试（{attempt + 1}/{attempts}）…")
             try:
                 with httpx.Client(**kwargs) as client:
                     push_http(client)
                     try:
-                        response = client.post(
-                            self._url(path),
-                            headers=self._headers(),
-                            json=payload,
-                        )
+                        with self._in_flight(f"正在请求中转站 {path}…"):
+                            response = client.post(
+                                self._url(path),
+                                headers=self._headers(),
+                                json=payload,
+                            )
                     finally:
                         pop_http(client)
                 return _json_or_error(response)
@@ -432,24 +553,25 @@ class RelayClient:
         data: dict,
         retries: int = 0,
     ) -> dict:
-        kwargs: dict = {"timeout": self.timeout}
-        if self.transport is not None:
-            kwargs["transport"] = self.transport
+        kwargs = self._client_kwargs()
         last_error: Exception | None = None
         attempts = max(1, retries + 1)
         for attempt in range(attempts):
             if stop_requested():
                 raise JobStopped("已手动停止")
+            if attempt:
+                self._emit(f"中转站无响应，正在重试（{attempt + 1}/{attempts}）…")
             try:
                 with httpx.Client(**kwargs) as client:
                     push_http(client)
                     try:
-                        response = client.post(
-                            self._url(path),
-                            headers=self._auth_headers(),
-                            data=data,
-                            files=files,
-                        )
+                        with self._in_flight(f"正在请求中转站 {path}…"):
+                            response = client.post(
+                                self._url(path),
+                                headers=self._auth_headers(),
+                                data=data,
+                                files=files,
+                            )
                     finally:
                         pop_http(client)
                 return _json_or_error(response)
@@ -479,6 +601,25 @@ class RelayClient:
             if chat_model_supports_titles(candidate):
                 return candidate.strip()
         return ""
+
+    def list_models(self) -> list[str]:
+        return parse_model_ids(self._models_payload())
+
+    def list_title_models(self) -> list[str]:
+        """Chat/vision models the current Key can use for titles."""
+        return title_models_from_payload(self._models_payload())
+
+    def _models_payload(self) -> dict:
+        data = self._get_json("/v1/models", timeout=20.0)
+        if isinstance(data, dict):
+            code = str(data.get("code") or "").lower()
+            failed = data.get("success") is False or (
+                "invalid" in code and "key" in code
+            )
+            if failed:
+                raise ApiError(str(data.get("message") or data.get("error") or "Invalid API key"))
+            return data
+        return {"data": data}
 
     def generate_title(self, original_stem: str, image: Path | None = None) -> str:
         model = self.resolve_title_model()
@@ -588,8 +729,13 @@ class RelayClient:
         category: str = "",
         subject: str = "",
     ) -> Path:
-        mime = mimetypes.guess_type(source.name)[0] or "image/png"
-        raw = source.read_bytes()
+        original_size = source.stat().st_size
+        raw, mime = relay_source_payload(source)
+        if len(raw) < original_size:
+            self._emit(
+                f"原图 {original_size // 1024}KB，已压缩到 {len(raw) // 1024}KB 再发给中转站"
+                "（过大的相机原图容易把中转站卡住）"
+            )
         encoded = base64.b64encode(raw).decode("ascii")
         data_url = f"data:{mime};base64,{encoded}"
         errors: list[str] = []
@@ -618,7 +764,7 @@ class RelayClient:
         copyright_blocked = False
         for path, payload in self._remix_requests(data_url, mime, category=category):
             try:
-                data = self._post_json(path, payload, retries=3)
+                data = self._post_json(path, payload, retries=1)
                 image_bytes, suffix = extract_image_payload(data, source.suffix)
             except ApiError as exc:
                 errors.append(f"{path}: {exc}")
@@ -856,7 +1002,12 @@ class RelayClient:
         clients = [self]
         title = title_api_settings(self.settings)
         if title is not self.settings:
-            clients.insert(0, RelayClient(title, timeout=self.timeout, transport=self.transport))
+            clients.insert(0, RelayClient(
+                title,
+                timeout=self.timeout,
+                transport=self.transport,
+                log=self.log,
+            ))
         return clients
 
 

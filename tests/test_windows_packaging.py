@@ -7,31 +7,43 @@ def test_windows_packaging_files_exist():
     assert (root / "start.bat").exists()
     assert (root / "packaging" / "exe-readme.txt").exists()
     assert (root / "packaging" / "open-studio.bat").exists()
+    assert (root / "packaging" / "windows_runtime.py").exists()
+    assert (root / "packaging" / "build_windows_embed.py").exists()
+    assert (root / "packaging" / "launcher.cs").exists()
     assert (root / "wallpaper_studio.spec").exists()
     workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
     assert "name: Build client app" in workflow
     assert "windows-latest" in workflow
-    assert "PLAYWRIGHT_BROWSERS_PATH" in workflow
-    assert "playwright install chromium" in workflow
+    assert "playwright install --with-deps chromium" in workflow
     assert "python312.dll" in workflow
+    assert "pythonw.exe" in workflow
+    assert "build_windows_embed.py" in workflow
+    assert "do not bundle Chromium" in workflow
+    assert "include-hidden-files: true" in workflow
+    assert "Smoke-test Windows exe" in workflow
     assert "open-studio.bat" in workflow
+    assert "1-打开壁纸工坊.bat" in workflow
+    assert "clean_for_delivery" in workflow
+    assert "Confirm Windows zip layout" in workflow
     spec = (root / "wallpaper_studio.spec").read_text(encoding="utf-8")
     assert ".local-browsers" in spec
-    assert 'sys.platform != "darwin"' in spec
+    assert "Do not ship Playwright" in spec
     assert "console=False" in spec
-    assert "_windows_runtime_binaries" in spec
-    assert "vcruntime140.dll" in spec
-    assert "python312.dll" in spec
-    assert "webview" in spec
-    assert "wallpaper_studio.desktop" in spec
+    assert "_windows_runtime" in spec
+    launcher_cs = (root / "packaging" / "launcher.cs").read_text(encoding="utf-8")
+    assert "SetDllDirectory" in launcher_cs
+    assert "pythonw.exe" in launcher_cs
+    assert "LOAD_WITH_ALTERED_SEARCH_PATH" in launcher_cs
+    embed = (root / "packaging" / "build_windows_embed.py").read_text(encoding="utf-8")
+    assert "setuptools" in embed
+    assert "no-build-isolation" in embed
+    assert "multiprocessing.freeze_support" in (root / "run.py").read_text(encoding="utf-8")
     project = (root / "pyproject.toml").read_text(encoding="utf-8")
     assert "pywebview" in project
-    workflow = (root / ".github" / "workflows" / "build-client.yml").read_text(encoding="utf-8")
-    assert "if: runner.os != 'macOS'" in workflow
     text = (root / "build-windows.bat").read_text(encoding="utf-8", errors="replace")
     assert "WallpaperStudio.exe" in text
-    assert "PLAYWRIGHT_BROWSERS_PATH" in text
-    assert "打开壁纸工坊.bat" in text
+    assert "build_windows_embed.py" in text
+    assert "嵌入式 Python" in text
     ui = (root / "src" / "wallpaper_studio" / "web" / "studio.js").read_text(encoding="utf-8")
     assert "function renderLogs" in ui
     assert "function notify(" in ui
@@ -60,10 +72,47 @@ def test_windows_packaging_files_exist():
     assert "access_log=False" in launcher
     readme = (root / "packaging" / "exe-readme.txt").read_text(encoding="utf-8")
     assert "python312.dll" in readme
+    assert "1-打开壁纸工坊.bat" in readme
+    assert "Lib、Include" in readme or "Lib / Include" in readme
+    assert "往下滚" in readme
+    launcher_bat = (root / "packaging" / "open-studio.bat").read_text(encoding="utf-8")
+    assert "pythonw.exe" in launcher_bat
+    assert "Failed to load Python DLL" in launcher_bat
+    assert "Unblock-File" in launcher_bat
+    assert "WallpaperStudio\\WallpaperStudio.exe" in launcher_bat
+    assert "Lib 或 Include" in launcher_bat
+    runtime = (root / "packaging" / "windows_runtime.py").read_text(encoding="utf-8")
+    assert "vcruntime140_1.dll" in runtime
+    assert "ucrtbase.dll" in runtime
+    assert "api-ms-win-crt-" in runtime
     assert "vc_redist.x64.exe" in readme
     assert "程序窗口" in readme
     assert "WebView2" in readme
-    assert "系统浏览器" in readme
+    assert "系统 Edge" in readme or "Edge / Chrome" in readme
+
+
+def test_clean_for_delivery_strips_headers_and_logs(tmp_path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "build_windows_embed",
+        Path(__file__).resolve().parents[1] / "packaging" / "build_windows_embed.py",
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    dest = tmp_path / "app"
+    (dest / "Include").mkdir(parents=True)
+    (dest / "data").mkdir()
+    (dest / "Lib").mkdir()
+    (dest / "launcher.log").write_text("x", encoding="utf-8")
+    (dest / "WallpaperStudio.exe").write_bytes(b"mz")
+    mod.clean_for_delivery(dest)
+    assert not (dest / "Include").exists()
+    assert not (dest / "data").exists()
+    assert not (dest / "launcher.log").exists()
+    assert (dest / "Lib").is_dir()
+    assert (dest / "WallpaperStudio.exe").is_file()
 
 
 def test_studio_js_has_valid_syntax():
