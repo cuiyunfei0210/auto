@@ -236,6 +236,36 @@ def test_prepare_sends_image_to_title_model(studio_home, monkeypatch):
     assert prepared[0].path == source
 
 
+def test_prepare_title_timeout_still_remixes(studio_home, monkeypatch):
+    config = AppConfig(
+        mode="remix_then_upload",
+        api=ApiSettings(api_key="sk-test", filename_model="gpt-4o-mini"),
+        paths=PathSettings(source_dir=str(studio_home / "source"), output_dir=str(studio_home / "output")),
+        accounts=[Account(username="demo1", password="123123", upload_count=1, interval_seconds=0)],
+    )
+    save_config(config)
+    make_png(source_dir(config) / "2a662b.png")
+
+    def boom_title(self, stem, image=None):
+        raise ApiError("中转站网络超时或中断：The read operation timed out")
+
+    def fake_remix(self, source, dest_dir, title, **kwargs):
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{title}.png"
+        path.write_bytes(source.read_bytes())
+        return path
+
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.generate_title", boom_title)
+    monkeypatch.setattr("wallpaper_studio.prepare.RelayClient.remix_image", fake_remix)
+    logs: list[str] = []
+    prepared = prepare_images(config, logs.append)
+    assert len(prepared) == 1
+    assert prepared[0].title == "2a662b"
+    assert any("沿用原名 2a662b" in line for line in logs)
+    assert any("二创仍会继续" in line for line in logs)
+    assert not any("The read operation timed out" in line for line in logs)
+
+
 def test_prepare_stops_before_the_next_image(studio_home, monkeypatch):
     from wallpaper_studio.control import JobStopped
 

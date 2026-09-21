@@ -753,6 +753,13 @@ def test_title_api_settings_skips_dead_builtin_chat_key():
     assert title_list_key_candidates(ApiSettings(api_key=NEWXXT_CHAT_KEY, filename_api_key=NEWXXT_CHAT_KEY)) == []
 
 
+def test_friendly_message_for_read_timeout():
+    text = friendly_error_message("中转站网络超时或中断：The read operation timed out")
+    assert "还在处理" in text
+    assert "timed out" not in text.lower()
+    assert friendly_error_message(text) == text
+
+
 def test_generate_title_uses_filename_relay_host(tmp_path: Path):
     source = make_png(tmp_path / "night.png")
     seen: list[str] = []
@@ -806,7 +813,9 @@ def test_generate_title_sends_the_image(tmp_path: Path):
     content = seen[0]["messages"][1]["content"]
     assert isinstance(content, list)
     assert content[1]["type"] == "image_url"
-    assert content[1]["image_url"]["url"].startswith("data:image")
+    assert content[1]["image_url"]["url"].startswith("data:image/jpeg")
+    encoded = content[1]["image_url"]["url"].split(",", 1)[1]
+    assert len(base64.b64decode(encoded)) < source.stat().st_size + 4096
     text = content[0]["text"]
     assert "Chinese title" not in text
     assert "Write a short English wallpaper title" in text

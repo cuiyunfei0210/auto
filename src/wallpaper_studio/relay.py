@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import mimetypes
 import re
 import threading
 import time
@@ -42,6 +41,12 @@ def friendly_error_message(raw: str) -> str:
         return "文生图通道没有用上原图。"
     if "image_url is required" in lowered:
         return "改图接口没接到原图。"
+    if "read operation timed out" in lowered or "readtimeout" in lowered:
+        return "中转站还在处理，这次等得不够久。不是 Key 坏了。"
+    if "connecttimeout" in lowered or "connect timeout" in lowered:
+        return "连中转站超时。请检查网络后重试。"
+    if "网络超时或中断" in text:
+        return "中转站还在处理或网络中断。不是 Key 坏了。"
     if "没有可用的生图线路" in text or "no available compatible accounts" in lowered or "no available accounts" in lowered:
         return (
             "生图 Key 已经发到中转站，但这组 Key 现在没有可用的 gpt-image-2 线路。"
@@ -235,6 +240,8 @@ def is_transient_relay_error(text: str) -> bool:
 
 
 MAX_OUTPUT_SIDE = 7680
+TITLE_TIMEOUT = 90.0
+VISION_TIMEOUT = 90.0
 
 
 def official_image_size(value: str) -> str:
@@ -399,7 +406,7 @@ class RelayClient:
     def __init__(
         self,
         settings: ApiSettings,
-        timeout: float = 120.0,
+        timeout: float = 180.0,
         transport: httpx.BaseTransport | None = None,
         log: Callable[[str], None] | None = None,
     ) -> None:
@@ -484,7 +491,7 @@ class RelayClient:
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             if stop_requested():
                 raise JobStopped("已手动停止") from exc
-            raise ApiError(f"中转站网络超时或中断：{exc}") from exc
+            raise ApiError(friendly_error_message(f"中转站网络超时或中断：{exc}")) from exc
 
     def _chat_model(self) -> str:
         return (
@@ -527,7 +534,7 @@ class RelayClient:
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 if stop_requested():
                     raise JobStopped("已手动停止") from exc
-                last_error = ApiError(f"中转站网络超时或中断：{exc}")
+                last_error = ApiError(friendly_error_message(f"中转站网络超时或中断：{exc}"))
             except ApiError as exc:
                 last_error = exc
                 retryable = is_transient_relay_error(str(exc))
@@ -580,7 +587,7 @@ class RelayClient:
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 if stop_requested():
                     raise JobStopped("已手动停止") from exc
-                last_error = ApiError(f"中转站网络超时或中断：{exc}")
+                last_error = ApiError(friendly_error_message(f"中转站网络超时或中断：{exc}"))
             except ApiError as exc:
                 last_error = exc
                 if not is_transient_relay_error(str(exc)):
@@ -630,9 +637,7 @@ class RelayClient:
         prompt = self.settings.filename_prompt.strip() or "Generate a short wallpaper title."
         user_content: list | str
         if image is not None and image.exists():
-            mime = mimetypes.guess_type(image.name)[0] or "image/png"
-            encoded = base64.b64encode(image.read_bytes()).decode("ascii")
-            data_url = f"data:{mime};base64,{encoded}"
+            data_url = _vision_data_url(image)
             user_content = [
                 {
                     "type": "text",
@@ -660,7 +665,12 @@ class RelayClient:
             ],
             "max_tokens": 64,
         }
-        data = self._post_json("/v1/chat/completions", payload, timeout=20.0)
+        data = self._post_json(
+            "/v1/chat/completions",
+            payload,
+            timeout=TITLE_TIMEOUT,
+            retries=1,
+        )
         try:
             text = data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
@@ -709,7 +719,12 @@ class RelayClient:
         last_error: ApiError | None = None
         for client in self._vision_clients():
             try:
-                data = client._post_json("/v1/chat/completions", payload, timeout=40.0)
+                data = client._post_json(
+                    "/v1/chat/completions",
+                    payload,
+                    timeout=VISION_TIMEOUT,
+                    retries=1,
+                )
                 text = str(data["choices"][0]["message"]["content"]).strip()
             except (ApiError, KeyError, IndexError, TypeError) as exc:
                 last_error = exc if isinstance(exc, ApiError) else ApiError("识图接口返回格式无法解析。")
@@ -985,7 +1000,12 @@ class RelayClient:
         last_error: ApiError | None = None
         for client in self._vision_clients():
             try:
-                data = client._post_json("/v1/chat/completions", payload, timeout=40.0)
+                data = client._post_json(
+                    "/v1/chat/completions",
+                    payload,
+                    timeout=VISION_TIMEOUT,
+                    retries=1,
+                )
                 text = str(data["choices"][0]["message"]["content"]).strip()
             except (ApiError, KeyError, IndexError, TypeError) as exc:
                 last_error = exc if isinstance(exc, ApiError) else ApiError("识图接口返回格式无法解析。")

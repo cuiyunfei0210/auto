@@ -93,7 +93,10 @@ def prepare_images(
                 emit("已停止，不再处理后续图片。")
                 raise
             except Exception as exc:  # noqa: BLE001 - keep going with original name
-                emit(f"生成标题失败，沿用原名 {image.stem}：{exc}")
+                emit(
+                    f"写标题超时或失败，沿用原名 {image.stem}。"
+                    f"{friendly_error_message(str(exc))} 二创仍会继续。"
+                )
                 title = sanitize_filename(image.stem)
 
         if cancelled():
