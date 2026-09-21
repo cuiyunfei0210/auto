@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 import re
 from pathlib import Path
 
@@ -198,6 +199,49 @@ def fit_image_bytes(image_bytes: bytes, size: tuple[int, int], suffix: str = ".p
         else:
             cropped.save(buffer, format=fmt)
         return buffer.getvalue()
+
+
+MAX_RELAY_SIDE = 1536
+MAX_RELAY_BYTES = 1_000_000
+
+
+def relay_source_payload(path: Path) -> tuple[bytes, str]:
+    """Shrink huge camera files before they go to the image-edit API.
+
+    gpt-image-2 only sees ~1536px. Sending a 10MB 4K JPEG as base64 makes the
+    relay hang with no log output after 「正在二创」.
+    """
+    from io import BytesIO
+
+    from PIL import Image
+
+    raw = path.read_bytes()
+    mime = mimetypes.guess_type(path.name)[0] or "image/png"
+    try:
+        with Image.open(BytesIO(raw)) as image:
+            image.load()
+            image = image.convert("RGB")
+            width, height = image.size
+            if max(width, height) <= MAX_RELAY_SIDE and len(raw) <= MAX_RELAY_BYTES:
+                return raw, mime
+            scale = min(1.0, MAX_RELAY_SIDE / max(width, height))
+            if scale < 1.0:
+                image = image.resize(
+                    (max(1, int(width * scale)), max(1, int(height * scale))),
+                    Image.Resampling.LANCZOS,
+                )
+            quality = 88
+            payload = b""
+            while quality >= 50:
+                buffer = BytesIO()
+                image.save(buffer, format="JPEG", quality=quality, optimize=True)
+                payload = buffer.getvalue()
+                if len(payload) <= MAX_RELAY_BYTES:
+                    break
+                quality -= 8
+            return payload, "image/jpeg"
+    except Exception:
+        return raw, mime
 
 
 def image_dimensions(path: Path) -> tuple[int, int]:

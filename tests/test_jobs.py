@@ -203,7 +203,7 @@ def test_apply_defaults_keeps_user_cqwall_account():
     assert updated.accounts[0].password == "secret-pass"
 
 
-def test_apply_defaults_migrates_old_newxxt_key_and_adds_chat_key():
+def test_apply_defaults_migrates_old_newxxt_key_without_dead_chat_key():
     from wallpaper_studio.models import NEWXXT_API_KEY, NEWXXT_CHAT_KEY
 
     config = AppConfig.model_validate(
@@ -211,12 +211,13 @@ def test_apply_defaults_migrates_old_newxxt_key_and_adds_chat_key():
             "api": {
                 "base_url": "https://api.newxxt.top",
                 "api_key": "sk-beef6174c1f75a4eec5a5890a1f4ed02a3d4824ec72962cb51960d66d577c927",
+                "filename_api_key": NEWXXT_CHAT_KEY,
             }
         }
     )
     updated = apply_builtin_defaults(config)
     assert updated.api.api_key == NEWXXT_API_KEY
-    assert updated.api.filename_api_key == NEWXXT_CHAT_KEY
+    assert updated.api.filename_api_key == ""
 
 
 def test_apply_defaults_switches_xbhuiz_to_newxxt():

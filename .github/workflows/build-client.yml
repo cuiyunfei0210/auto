@@ -32,43 +32,124 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Build Windows portable app
+        if: runner.os == 'Windows'
+        run: python packaging/build_windows_embed.py
       - name: Install PyInstaller and app
+        if: runner.os != 'Windows'
         run: python -m pip install --upgrade pip pyinstaller && python -m pip install -e .
-      - name: Install Chromium into the Playwright package
-        if: runner.os != 'macOS'
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: "0"
-        run: python -m playwright install chromium
-      - name: Build executable
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: "0"
+      - name: Build Unix executable
+        if: runner.os != 'Windows'
         run: python -m PyInstaller --noconfirm wallpaper_studio.spec
       - name: Confirm Windows Python runtime is bundled
         if: runner.os == 'Windows'
         shell: python
         run: |
           from pathlib import Path
-          folder = Path("dist/WallpaperStudio/_internal")
-          exe = Path("dist/WallpaperStudio/WallpaperStudio.exe")
+          app = Path("dist/WallpaperStudio")
+          exe = app / "WallpaperStudio.exe"
+          py = app / "python312.dll"
+          pythonw = app / "pythonw.exe"
           assert exe.is_file(), exe
-          assert (folder / "python312.dll").is_file(), folder
-          names = {path.name.lower() for path in folder.glob("*.dll")}
-          assert "vcruntime140.dll" in names, sorted(names)[:40]
+          assert pythonw.is_file(), pythonw
+          assert (app / "run.py").is_file(), app
+          assert py.is_file() and py.stat().st_size >= 1_000_000, (py, py.stat().st_size if py.is_file() else 0)
+          dlls = {path.name.lower() for path in app.glob("*.dll")}
+          assert "vcruntime140.dll" in dlls, sorted(dlls)[:40]
+          chrome = list(app.rglob("chrome.exe")) + list(app.rglob("chrome-headless-shell.exe"))
+          assert not chrome, ("do not bundle Chromium; Windows uses system Edge", chrome[:3])
+          assert not (app / "_internal" / "python312.dll").exists()
+      - name: Smoke-test Windows exe
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Join-Path (Get-Location) "dist/WallpaperStudio"
+          $exe = Join-Path $app "WallpaperStudio.exe"
+          $python = Join-Path $app "python.exe"
+          $err = Join-Path $app "smoke-err.txt"
+          $out = Join-Path $app "smoke-out.txt"
+          $proc = Start-Process -FilePath $python -ArgumentList @("run.py","--no-browser") -WorkingDirectory $app -PassThru -RedirectStandardError $err -RedirectStandardOutput $out
+          $ok = $false
+          try {
+            for ($i = 0; $i -lt 40; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/api/health
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {}
+              if ($proc.HasExited -and $proc.ExitCode -ne 0) { break }
+            }
+            if (-not $ok) {
+              Write-Host "--- smoke-out ---"
+              if (Test-Path $out) { Get-Content $out -ErrorAction SilentlyContinue }
+              Write-Host "--- smoke-err ---"
+              if (Test-Path $err) { Get-Content $err -ErrorAction SilentlyContinue }
+              Write-Host "--- studio.log ---"
+              $log = Join-Path $app "data\studio.log"
+              if (Test-Path $log) { Get-Content $log -ErrorAction SilentlyContinue }
+              if ($proc.HasExited) { throw "python.exe run.py --no-browser exited with code $($proc.ExitCode) before /api/health" }
+              throw "python.exe run.py --no-browser did not answer /api/health"
+            }
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+            $proc = Start-Process -FilePath $exe -ArgumentList "--no-browser" -WorkingDirectory $app -PassThru
+            $ok = $false
+            for ($i = 0; $i -lt 40; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/api/health
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {}
+              if ($proc.HasExited -and $proc.ExitCode -ne 0) { break }
+            }
+            if (-not $ok) {
+              Write-Host "--- launcher.log ---"
+              $ll = Join-Path $app "launcher.log"
+              if (Test-Path $ll) { Get-Content $ll -ErrorAction SilentlyContinue }
+              Write-Host "--- studio.log ---"
+              $log = Join-Path $app "data\studio.log"
+              if (Test-Path $log) { Get-Content $log -ErrorAction SilentlyContinue }
+              if ($proc.HasExited) { throw "WallpaperStudio.exe exited with code $($proc.ExitCode) before /api/health" }
+              throw "WallpaperStudio.exe did not answer /api/health"
+            }
+          } finally {
+            Get-Process python,pythonw,WallpaperStudio -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
 
       - name: Stage delivery folder
         shell: bash
         run: |
           mkdir -p delivery
           cp packaging/exe-readme.txt delivery/使用说明.txt || cp packaging/exe-readme.txt delivery/
-          if [ -d dist/WallpaperStudio ]; then
+          if [ -f dist/WallpaperStudio/WallpaperStudio.exe ]; then
+            python -c "from pathlib import Path; import sys; sys.path.insert(0, 'packaging'); from build_windows_embed import clean_for_delivery, _copy_launcher_bats; p = Path('dist/WallpaperStudio'); clean_for_delivery(p); _copy_launcher_bats(p)"
+            cp packaging/open-studio.bat "delivery/1-打开壁纸工坊.bat"
+            cp packaging/open-studio.bat "delivery/打开壁纸工坊.bat"
             cp -R dist/WallpaperStudio delivery/WallpaperStudio
-            cp packaging/open-studio.bat delivery/WallpaperStudio/打开壁纸工坊.bat || true
+          elif [ -d dist/WallpaperStudio ]; then
+            cp -R dist/WallpaperStudio delivery/WallpaperStudio
+            cp packaging/open-studio.bat "delivery/WallpaperStudio/打开壁纸工坊.bat" || true
           elif [ -f dist/WallpaperStudio.exe ]; then
             cp dist/WallpaperStudio.exe delivery/
           else
             cp dist/WallpaperStudio delivery/
           fi
+      - name: Confirm Windows zip layout
+        if: runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          root = Path("delivery")
+          assert (root / "1-打开壁纸工坊.bat").is_file(), list(root.iterdir())
+          app = root / "WallpaperStudio"
+          assert (app / "WallpaperStudio.exe").is_file(), app
+          assert (app / "pythonw.exe").is_file(), app
+          assert (app / "python312.dll").is_file(), app
+          assert (app / "1-打开壁纸工坊.bat").is_file(), list(app.glob("*.bat"))
+          assert not (app / "Include").exists(), "headers hide the exe in Explorer"
+          assert not (app / "data").exists(), "smoke-test data must not ship"
       - uses: actions/upload-artifact@v4
         with:
           name: client-${{ runner.os }}
           path: delivery/
+          include-hidden-files: true

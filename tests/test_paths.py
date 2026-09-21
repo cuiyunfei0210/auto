@@ -9,7 +9,18 @@ def test_web_assets_exist():
     assert (folder / "studio.js").exists()
 
 
-def test_app_root_is_repo():
+def test_packaged_env_marks_frozen(monkeypatch):
+    from wallpaper_studio.paths import is_frozen
+
+    monkeypatch.setattr("wallpaper_studio.paths.sys.frozen", False, raising=False)
+    monkeypatch.setenv("WALLPAPER_STUDIO_PACKAGED", "1")
+    assert is_frozen() is True
+
+
+def test_app_root_is_repo(monkeypatch):
+    monkeypatch.delenv("WALLPAPER_STUDIO_PACKAGED", raising=False)
+    monkeypatch.delenv("WALLPAPER_STUDIO_ROOT", raising=False)
+    monkeypatch.setattr("wallpaper_studio.paths.sys.frozen", False, raising=False)
     root = app_root()
     assert (root / "run.py").exists()
     assert (root / "start.bat").exists()

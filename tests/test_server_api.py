@@ -21,6 +21,12 @@ def test_home_and_config_roundtrip(studio_home):
     assert "function collectAccounts" in js.text
     assert "secretStore" in js.text
     assert "btn-save" in home.text
+    assert 'id="filename_model"' in home.text
+    assert "btn-refresh-title-models" in home.text
+    assert "刷新模型" in home.text
+    assert "function fillTitleModelSelect" in js.text
+    assert "function loadTitleModels" in js.text
+    assert "/api/title-models" in js.text
     assert "function canonicalCategory" in js.text
     assert "upload_category" in js.text
     assert "function appendLog" in js.text
@@ -131,6 +137,48 @@ def test_default_state_includes_cqwall_and_newxxt(studio_home):
     assert "newxxt.top" in state["api"]["base_url"]
     assert state["api"]["api_key"].startswith("sk-")
     assert state["api"]["filename_model"] == "gpt-5.4-mini"
+
+
+def test_title_models_endpoint_lists_chat_models_from_relay(studio_home, monkeypatch):
+    reset_demo_sessions()
+
+    def fake_list(self):
+        return ["gpt-5.4-mini", "gpt-5.4", "gpt-4o-mini"]
+
+    monkeypatch.setattr("wallpaper_studio.server.RelayClient.list_title_models", fake_list)
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/title-models",
+        json={"api_key": "sk-test", "filename_api_key": "sk-chat", "filename_model": "gpt-5.4-mini"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["source"] == "relay"
+    assert data["models"] == ["gpt-5.4-mini", "gpt-5.4", "gpt-4o-mini"]
+    assert "gpt-image-2" not in data["models"]
+
+
+def test_title_models_endpoint_falls_back_when_relay_fails(studio_home, monkeypatch):
+    from wallpaper_studio.relay import ApiError
+
+    reset_demo_sessions()
+
+    def boom(self):
+        raise ApiError("Invalid API key")
+
+    monkeypatch.setattr("wallpaper_studio.server.RelayClient.list_title_models", boom)
+    client = TestClient(create_app())
+    response = client.post("/api/title-models", json={"api_key": "sk-bad"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is False
+    assert data["source"] == "fallback"
+    assert "gpt-5.4-mini" in data["models"]
+    assert "gpt-4o" in data["models"]
+    assert not data.get("error")
+    assert "可选" in (data.get("hint") or "")
+    assert "API Key 无效" not in (data.get("hint") or "")
 
 
 def test_state_includes_archive_warning_field(studio_home):

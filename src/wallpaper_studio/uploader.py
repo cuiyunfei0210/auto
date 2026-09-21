@@ -42,7 +42,7 @@ class BrowserUploader:
             try:
                 self._browser = await self._playwright.chromium.launch(**launch_kwargs)
                 if channel:
-                    self.log(f"未找到内置 Chromium，已改用系统浏览器（{channel}）")
+                    self.log(f"使用系统浏览器上传（{channel}）")
                 launch_error = None
                 break
             except Exception as exc:  # noqa: BLE001 - try Edge/Chrome before failing
