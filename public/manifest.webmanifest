@@ -1,0 +1,25 @@
+{
+  "name": "芽芽乐园",
+  "short_name": "芽芽乐园",
+  "description": "给小朋友听儿歌、看动画、读故事。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fff7ec",
+  "theme_color": "#ffb000",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
