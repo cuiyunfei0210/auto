@@ -137,7 +137,7 @@ export function App() {
               />
             )}
             {screen.name === "show" && (
-              <section>
+              <section className="page wide">
                 <TopBar title={shows.find((item) => item.id === screen.showId)?.title ?? "动画"} onBack={back} />
                 <ShowStage id={screen.showId} />
               </section>
@@ -146,13 +146,13 @@ export function App() {
               <StoryList onBack={back} onOpen={(storyId) => push({ name: "story", storyId })} />
             )}
             {screen.name === "story" && storyById(screen.storyId) && (
-              <section>
+              <section className="page">
                 <TopBar title={storyById(screen.storyId)!.title} onBack={back} />
                 <StoryReader story={storyById(screen.storyId)!} onBack={back} />
               </section>
             )}
             {screen.name === "play" && (
-              <section>
+              <section className="page wide">
                 <TopBar title="点一点" onBack={back} />
                 <Playroom />
               </section>
@@ -250,7 +250,7 @@ function Home({
 
 function SongList({ onBack, onOpen }: { onBack: () => void; onOpen: (id: string) => void }) {
   return (
-    <section>
+    <section className="page">
       <TopBar title="儿歌" onBack={onBack} />
       <div className="song-list">
         {songs.map((song) => (
@@ -348,7 +348,7 @@ function Player({
 
 function ShowList({ onBack, onOpen }: { onBack: () => void; onOpen: (id: string) => void }) {
   return (
-    <section>
+    <section className="page">
       <TopBar title="动画" onBack={onBack} />
       <div className="card-list">
         {shows.map((show) => (
@@ -367,7 +367,7 @@ function ShowList({ onBack, onOpen }: { onBack: () => void; onOpen: (id: string)
 
 function StoryList({ onBack, onOpen }: { onBack: () => void; onOpen: (id: string) => void }) {
   return (
-    <section>
+    <section className="page">
       <TopBar title="故事" onBack={onBack} />
       <div className="card-list">
         {stories.map((story) => (

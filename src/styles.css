@@ -183,6 +183,13 @@ button { cursor: pointer; }
   text-decoration: underline;
 }
 
+.page {
+  width: min(680px, 100%);
+  margin: 0 auto;
+}
+
+.page.wide { width: min(920px, 100%); }
+
 .topbar {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -238,10 +245,13 @@ button { cursor: pointer; }
 .lyrics {
   position: relative;
   margin: 14px 0;
-  max-height: 30dvh;
+  max-height: 34dvh;
   overflow: auto;
   text-align: center;
+  scrollbar-width: none;
 }
+
+.lyrics::-webkit-scrollbar { display: none; }
 
 .lyrics p {
   margin: 6px 0;
